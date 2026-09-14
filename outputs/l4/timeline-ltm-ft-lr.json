@@ -1,0 +1,32 @@
+{
+  "job": "ltm-ft-lr",
+  "gpu": "1x NVIDIA L4 (g2-standard-8, GKE node pool scaling from zero)",
+  "seconds_since_job_created": {
+    "scale_up_triggered": null,
+    "gpu_node_created": -3177.0,
+    "pod_scheduled": 1.0,
+    "image_pull_started": null,
+    "image_pulled": 1.0,
+    "container_started": 1.0,
+    "all_commands_done": 1159.0
+  },
+  "image_pull_seconds": null,
+  "commands": [
+    {
+      "command": "ltm-ft tune --task checkerboard --train-encoders --data-seed 27 --seed 2 --learning-rate 1e-4 --max-steps 300 --eval-every 25 --name l4/encoders_data27_lr1e-4_300steps",
+      "seconds": 321.0
+    },
+    {
+      "command": "ltm-ft tune --task checkerboard --train-encoders --data-seed 27 --seed 2 --learning-rate 1e-3 --max-steps 300 --eval-every 25 --name l4/encoders_data27_lr1e-3_300steps",
+      "seconds": 280.0
+    },
+    {
+      "command": "ltm-ft tune --task checkerboard --train-encoders --data-seed 47 --seed 4 --learning-rate 1e-4 --max-steps 300 --eval-every 25 --name l4/encoders_data47_lr1e-4_300steps",
+      "seconds": 275.0
+    },
+    {
+      "command": "ltm-ft tune --task checkerboard --train-encoders --data-seed 47 --seed 4 --learning-rate 1e-3 --max-steps 300 --eval-every 25 --name l4/encoders_data47_lr1e-3_300steps",
+      "seconds": 275.0
+    }
+  ]
+}

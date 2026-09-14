@@ -27,3 +27,6 @@ outputs/pilot*/
 
 # Article, social and slide drafts (not published with the repo)
 drafts/
+
+# Raw GKE pod logs written by k8s/gke/collect.sh (debugging only)
+outputs/.gke-*

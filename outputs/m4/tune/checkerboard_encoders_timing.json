@@ -1,0 +1,64 @@
+{
+  "data": {
+    "task": "checkerboard",
+    "n_train": 1500,
+    "n_val": 500,
+    "n_test": 0,
+    "data_seed": 7,
+    "noise_columns": 0,
+    "val_ceiling": {
+      "log_loss": 0.13258735157374202,
+      "roc_auc": 0.9719959674193085,
+      "accuracy": 0.972
+    }
+  },
+  "config": {
+    "n_trainable_blocks": 4,
+    "train_encoders": true,
+    "learning_rate": 0.0003,
+    "weight_decay": 0.01,
+    "max_steps": 5,
+    "warmup_steps": 5,
+    "context_size": 512,
+    "query_size": 256,
+    "grad_clip": 1.0,
+    "eval_every": 5,
+    "patience": 5,
+    "n_estimators_val": 2,
+    "seed": 0
+  },
+  "best_step": 5,
+  "stopped_early": false,
+  "history": [
+    {
+      "step": 0,
+      "train_loss": NaN,
+      "val_log_loss": 0.607712849021264,
+      "val_roc_auc": 0.7748875838120689,
+      "val_accuracy": 0.702
+    },
+    {
+      "step": 5,
+      "train_loss": 0.6281138837337494,
+      "val_log_loss": 0.4864751402812292,
+      "val_roc_auc": 0.8777904018178618,
+      "val_accuracy": 0.812
+    }
+  ],
+  "total_s": 208.80488166700525,
+  "efficiency": {
+    "steps": 5,
+    "step_s_median": 36.72305149999738,
+    "step_s_mean": 29.093483566801297,
+    "validation_s_mean": 26.158154083503177,
+    "peak_memory_gb": 17.888444416
+  },
+  "environment": {
+    "device": "mps",
+    "accelerator": "Apple M4 (MPS)",
+    "torch": "2.14.0",
+    "tabfm": "1.0.1",
+    "python": "3.14.0",
+    "machine": "arm64"
+  }
+}

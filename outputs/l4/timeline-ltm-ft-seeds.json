@@ -1,0 +1,52 @@
+{
+  "job": "ltm-ft-seeds",
+  "gpu": "1x NVIDIA L4 (g2-standard-8, GKE node pool scaling from zero)",
+  "seconds_since_job_created": {
+    "scale_up_triggered": null,
+    "gpu_node_created": -963.0,
+    "pod_scheduled": 0.0,
+    "image_pull_started": null,
+    "image_pulled": 0.0,
+    "container_started": 1.0,
+    "all_commands_done": 1200.0
+  },
+  "image_pull_seconds": null,
+  "commands": [
+    {
+      "command": "ltm-ft run --task runners --train-encoders --name l4/runners_encoders",
+      "seconds": 192.0
+    },
+    {
+      "command": "ltm-ft run --task checkerboard --data-seed 17 --seed 1 --name l4/seeds/last4_data17",
+      "seconds": 108.0
+    },
+    {
+      "command": "ltm-ft run --task checkerboard --train-encoders --data-seed 17 --seed 1 --name l4/seeds/encoders_data17",
+      "seconds": 116.0
+    },
+    {
+      "command": "ltm-ft run --task checkerboard --data-seed 27 --seed 2 --name l4/seeds/last4_data27",
+      "seconds": 133.0
+    },
+    {
+      "command": "ltm-ft run --task checkerboard --train-encoders --data-seed 27 --seed 2 --name l4/seeds/encoders_data27",
+      "seconds": 135.0
+    },
+    {
+      "command": "ltm-ft run --task checkerboard --data-seed 37 --seed 3 --name l4/seeds/last4_data37",
+      "seconds": 120.0
+    },
+    {
+      "command": "ltm-ft run --task checkerboard --train-encoders --data-seed 37 --seed 3 --name l4/seeds/encoders_data37",
+      "seconds": 177.0
+    },
+    {
+      "command": "ltm-ft run --task checkerboard --data-seed 47 --seed 4 --name l4/seeds/last4_data47",
+      "seconds": 95.0
+    },
+    {
+      "command": "ltm-ft run --task checkerboard --train-encoders --data-seed 47 --seed 4 --name l4/seeds/encoders_data47",
+      "seconds": 117.0
+    }
+  ]
+}

@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   lint:
-    name: Lint and format
+    name: Lint, format and shell scripts
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -34,6 +34,12 @@ jobs:
 
       - name: Format
         run: uv run --no-sync ruff format --check .
+
+      # kctl is a bash script without the .sh extension.
+      - name: Shellcheck
+        run: |
+          git ls-files -z '*.sh' | xargs -0 shellcheck -x
+          shellcheck -x k8s/gke/kctl
 
   test:
     name: Types (mypy --strict) and tests

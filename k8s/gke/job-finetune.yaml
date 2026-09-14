@@ -1,0 +1,47 @@
+# One Job on the L4 runs every experiment in the `ltm-ft-experiments` ConfigMap (written by finetune.sh), then waits
+# so finetune.sh can copy /work/outputs back with kubectl cp. finetune.sh deletes the Job afterwards, and the L4 node
+# pool scales back to zero.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${JOB}
+  namespace: ${NAMESPACE}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 14400
+  template:
+    metadata:
+      annotations:
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+    spec:
+      restartPolicy: Never
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-l4
+      containers:
+        - name: finetune
+          image: ${IMAGE}
+          command: ["/bin/bash", "/config/experiments.sh"]
+          env:
+            # GKE mounts the node's NVIDIA driver at /usr/local/nvidia; python:*-slim does not point the loader there.
+            - name: LD_LIBRARY_PATH
+              value: /usr/local/nvidia/lib64
+            - name: HF_HOME
+              value: /tmp/hf
+          resources:
+            requests: { cpu: "6", memory: 20Gi, nvidia.com/gpu: "1" }
+            limits: { cpu: "7", memory: 26Gi, nvidia.com/gpu: "1" }
+          volumeMounts:
+            - { name: config, mountPath: /config }
+            - { name: work, mountPath: /work }
+            - { name: hf, mountPath: /tmp/hf }
+      volumes:
+        - name: config
+          configMap: { name: ltm-ft-experiments }
+        - name: work
+          emptyDir: {}
+        - name: hf
+          emptyDir: {}

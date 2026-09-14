@@ -1,0 +1,25 @@
+# Build the CUDA image natively on amd64 inside GCP: no multi-GB upload from a laptop, no QEMU emulation.
+#
+#   gcloud builds submit --config k8s/gke/cloudbuild.yaml --substitutions _REGION=us-central1,_REPO=ltm-ft .
+substitutions:
+  _REGION: us-central1
+  _REPO: ltm-ft
+options:
+  machineType: E2_HIGHCPU_8
+  diskSizeGb: 100
+  logging: CLOUD_LOGGING_ONLY
+timeout: 3600s
+steps:
+  - id: image
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - docker/finetune.Dockerfile
+      - --build-arg
+      - TORCH_VARIANT=cu126
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/ltm-ft:cu126
+      - .
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/ltm-ft:cu126

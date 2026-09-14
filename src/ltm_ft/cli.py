@@ -15,7 +15,7 @@ import json
 import platform
 import time
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import numpy as np
 import pandas as pd
@@ -27,6 +27,7 @@ from safetensors.torch import save_file
 from ltm_ft.data import POSITIVE, TRUE_PROB, Split, Task, labels, make_split
 from ltm_ft.evaluate import Metrics, ceiling, paired_bootstrap, predict_positive, score
 from ltm_ft.finetune import FinetuneConfig, FinetuneResult, finetune
+from ltm_ft.hardware import accelerator_name, synchronize
 from ltm_ft.model import load_classifier, pick_device, trainable_state
 
 OUTPUTS_DIR = Path("outputs")
@@ -76,6 +77,7 @@ def _summary(title: str, rows: dict[str, Metrics], deltas: dict[str, dict[str, f
 def _environment(device: str) -> dict[str, str]:
     return {
         "device": device,
+        "accelerator": accelerator_name(device),
         "torch": torch.__version__,
         "tabfm": tabfm.__version__,
         "python": platform.python_version(),
@@ -126,12 +128,17 @@ def run(
     print(f"{task}: {len(split.train)} train / {len(split.val)} val / {len(split.test)} test rows, device {device}")
 
     print("loading TabFM classification weights...")
-    model = load_classifier(device)
     timings: dict[str, float] = {}
+    t0 = time.perf_counter()
+    model = load_classifier(device)
+    synchronize(device)
+    timings["model_load_s"] = time.perf_counter() - t0
 
     def score_test(tag: str) -> np.ndarray:
+        synchronize(device)
         t0 = time.perf_counter()
         p = predict_positive(model, split.train, split.test, n_estimators_test, seed)
+        synchronize(device)
         timings[f"test_{tag}_s"] = time.perf_counter() - t0
         print(f"[{tag}] test: {score(y_test, p)} ({timings[f'test_{tag}_s']:.0f}s)")
         return p
@@ -162,6 +169,7 @@ def run(
         "delta_finetuned_minus_zero_shot": deltas,
         **_result_info(result),
         "timings_s": {**timings, "total_s": time.perf_counter() - started},
+        "efficiency": result.efficiency(),
         "environment": _environment(device),
     }
     (out_dir / "results.json").write_text(json.dumps(results, indent=2) + "\n")
@@ -224,6 +232,7 @@ def tune(
         "config": config.as_dict(),
         **_result_info(result),
         "total_s": time.perf_counter() - started,
+        "efficiency": result.efficiency(),
         "environment": _environment(device),
     }
     out.write_text(json.dumps(payload, indent=2) + "\n")
@@ -265,6 +274,7 @@ def data(
 
 @app.command()
 def precision(
+    name: Annotated[str, typer.Option(help="results go to outputs/<name>.json")] = "precision/checkerboard",
     task: TaskOpt = Task.checkerboard,
     n_train: TrainOpt = 1500,
     n_val: ValOpt = 500,
@@ -279,14 +289,14 @@ def precision(
     split = make_split(n_train, n_val, 0, data_seed, 0, task)
     y_val = labels(split.val)
     scores: dict[str, dict[str, float]] = {}
-    for name, dtype in (("bfloat16", torch.bfloat16), ("float32", None)):
+    for precision_name, dtype in (("bfloat16", torch.bfloat16), ("float32", None)):
         model = load_classifier(device, dtype)
         metrics = score(y_val, predict_positive(model, split.train, split.val, n_estimators, 0))
-        scores[name] = metrics.as_dict()
-        print(f"{name}: {metrics}")
+        scores[precision_name] = metrics.as_dict()
+        print(f"{precision_name}: {metrics}")
         del model
         gc.collect()
-    out = OUTPUTS_DIR / "precision" / f"{task}.json"
+    out = OUTPUTS_DIR / f"{name}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     payload = {"data": _data_info(task, split, data_seed, 0), "n_estimators": n_estimators, "val": scores}
     out.write_text(json.dumps({**payload, "environment": _environment(device)}, indent=2) + "\n")
@@ -297,13 +307,82 @@ def precision(
 def plot(
     figures_dir: Annotated[Path, typer.Option(help="where to write the PNGs")] = Path("docs/figures"),
 ) -> None:
-    """Render the README figures from outputs/ (no model needed)."""
-    from ltm_ft.plots import before_after, validation_curve
+    """Render the README figures from outputs/ (no model needed); figures whose inputs are missing are skipped."""
+    from ltm_ft import plots
 
-    curve = OUTPUTS_DIR / "tune" / "checkerboard_b4_lr3e-4.json"
-    if curve.exists():
-        print(validation_curve(curve, figures_dir / "checkerboard_validation.png", "Checkerboard: validation accuracy"))
-    runs = {task: OUTPUTS_DIR / task / "results.json" for task in ("runners", "checkerboard")}
-    runs = {task: path for task, path in runs.items() if path.exists()}
-    if runs:
-        print(before_after(runs, figures_dir / "before_after.png", "Zero-shot vs fine-tuned TabFM, same test rows"))
+    def results(*parts: str) -> Path:
+        return OUTPUTS_DIR.joinpath(*parts, "results.json")
+
+    machines = {"Apple M4 laptop (MPS)": "m4", "NVIDIA L4 on GKE": "l4"}
+    variants = {
+        "runners · last 4 blocks": "runners",
+        "runners · + encoders": "runners_encoders",
+        "checkerboard · last 4 blocks": "checkerboard",
+        "checkerboard · + encoders": "checkerboard_encoders",
+    }
+    panels = {
+        machine: {label: results(tag, run) for label, run in variants.items() if results(tag, run).exists()}
+        for machine, tag in machines.items()
+    }
+    if any(panels.values()):
+        title = "Zero-shot vs fine-tuned TabFM, same 3,000 test rows per task"
+        notes = {"Apple M4 laptop (MPS)": {"checkerboard · + encoders": "stopped: ran out of memory (swapping)"}}
+        print(plots.before_after(panels, figures_dir / "before_after.png", title, notes))
+
+    curves = [
+        ("last 4 blocks", results("l4", "checkerboard"), plots.LAST4),
+        ("+ encoders", results("l4", "checkerboard_encoders"), plots.ENCODERS),
+    ]
+    if all(path.exists() for _, path, _ in curves):
+        title = "Checkerboard on the L4: validation accuracy while fine-tuning"
+        print(plots.validation_curves(curves, figures_dir / "checkerboard_validation.png", title))
+
+    timing_inputs = [
+        results("m4", "checkerboard"),
+        results("l4", "checkerboard"),
+        results("l4", "checkerboard_encoders"),
+    ]
+    m4_encoders_timing = OUTPUTS_DIR / "m4" / "tune" / "checkerboard_encoders_timing.json"
+    if all(path.exists() for path in timing_inputs) and m4_encoders_timing.exists():
+        m4, l4, l4e = (_load_json(path) for path in timing_inputs)
+        m4e = _load_json(m4_encoders_timing)
+
+        def scoring(run: dict[str, Any]) -> float:  # both test passes (zero-shot and fine-tuned) of a run
+            return float((run["timings_s"]["test_zero-shot_s"] + run["timings_s"]["test_fine-tuned_s"]) / 2)
+
+        rows = [
+            ("gradient step, last 4 blocks", m4["efficiency"]["step_s_median"], l4["efficiency"]["step_s_median"], "s"),
+            ("gradient step, + encoders", m4e["efficiency"]["step_s_median"], l4e["efficiency"]["step_s_median"], "s"),
+            (
+                "validation pass, 500 rows",
+                m4["efficiency"]["validation_s_mean"],
+                l4["efficiency"]["validation_s_mean"],
+                "s",
+            ),
+            ("scoring 3,000 test rows", scoring(m4), scoring(l4), "s"),
+            ("150 fine-tuning steps + validation", m4["timings_s"]["finetune_s"], l4["timings_s"]["finetune_s"], "s"),
+            ("whole run, incl. model load", m4["timings_s"]["total_s"], l4["timings_s"]["total_s"], "s"),
+        ]
+        title = "L4 on GKE vs M4 laptop: same checkerboard run"
+        print(plots.efficiency(rows, figures_dir / "efficiency.png", title))
+
+    seed_rows = {"data seed 7": (results("l4", "checkerboard"), results("l4", "checkerboard_encoders"))}
+    for d in (17, 27, 37, 47):
+        seed_rows[f"data seed {d}"] = (
+            results("l4", "seeds", f"last4_data{d}"),
+            results("l4", "seeds", f"encoders_data{d}"),
+        )
+    if all(p.exists() for pair in seed_rows.values() for p in pair):
+        title = "Checkerboard on the L4: five data seeds"
+        print(plots.seeds(seed_rows, figures_dir / "seeds.png", title))
+
+    long_runs = [
+        (f"data seed {d}", OUTPUTS_DIR / "l4" / "tune" / f"encoders_data{d}_300steps.json") for d in (17, 27, 47)
+    ]
+    if all(path.exists() for _, path in long_runs):
+        title = "Training the encoders can collapse to predicting 0.5 (L4, lr 3e-4)"
+        print(plots.log_loss_curves(long_runs, figures_dir / "collapse.png", title))
+
+
+def _load_json(path: Path) -> dict[str, Any]:
+    return dict(json.loads(path.read_text()))

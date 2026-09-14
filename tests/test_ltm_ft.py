@@ -13,7 +13,7 @@ from torch import nn
 
 from ltm_ft.data import TRUE_PROB, Split, features, labels, make_split
 from ltm_ft.evaluate import paired_bootstrap, predict_positive, score
-from ltm_ft.finetune import Float32Master, episode_loss, lr_multiplier, make_episode
+from ltm_ft.finetune import FinetuneConfig, Float32Master, episode_loss, finetune, lr_multiplier, make_episode
 from ltm_ft.model import load_trainable_state, prepare_for_finetuning, trainable_modules, trainable_state
 
 
@@ -143,3 +143,16 @@ def test_encoder_variant_trains_encoders_and_still_predicts(split: Split) -> Non
     assert len(params) > len(prepare_for_finetuning(tiny_tabfm(), n_blocks=1))
     p = predict_positive(model, split.train, split.test, n_estimators=2, seed=0)
     assert np.all((p > 0) & (p < 1))
+
+
+def test_finetune_loop_records_history_and_efficiency(split: Split) -> None:
+    model = tiny_tabfm()
+    config = FinetuneConfig(
+        n_trainable_blocks=1, max_steps=3, warmup_steps=1, context_size=60, query_size=20, eval_every=2, patience=5
+    )
+    result = finetune(model, split, config, device="cpu", log=lambda _: None)
+    assert [h["step"] for h in result.history] == [0, 2, 3]
+    assert len(result.step_seconds) == 3 and len(result.validation_seconds) == 3
+    efficiency = result.efficiency()
+    assert efficiency["steps"] == 3 and efficiency["peak_memory_gb"] is None  # CPU reports no accelerator memory
+    assert all(not p.requires_grad and p.dtype == torch.bfloat16 for p in model.parameters())

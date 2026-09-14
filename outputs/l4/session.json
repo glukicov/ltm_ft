@@ -1,0 +1,56 @@
+{
+  "what": "The whole GKE session on 2026-09-14: every Job, how long the L4 was busy, and what the cluster cost at list price",
+  "jobs": [
+    {
+      "job": "ltm-ft-20260914-090533",
+      "container_started": "2026-09-14T09:09:24Z",
+      "all_done": "2026-09-14T09:18:08Z",
+      "gpu_busy_seconds": 524.0,
+      "commands": 4,
+      "startup_seconds_from_job_creation": 228.0
+    },
+    {
+      "job": "ltm-ft-seeds",
+      "container_started": "2026-09-14T09:22:33Z",
+      "all_done": "2026-09-14T09:42:32Z",
+      "gpu_busy_seconds": 1199.0,
+      "commands": 9,
+      "startup_seconds_from_job_creation": 1.0
+    },
+    {
+      "job": "ltm-ft-long",
+      "container_started": "2026-09-14T09:43:46Z",
+      "all_done": "2026-09-14T09:58:37Z",
+      "gpu_busy_seconds": 891.0,
+      "commands": 3,
+      "startup_seconds_from_job_creation": 0.0
+    },
+    {
+      "job": "ltm-ft-lr",
+      "container_started": "2026-09-14T09:59:27Z",
+      "all_done": "2026-09-14T10:18:45Z",
+      "gpu_busy_seconds": 1158.0,
+      "commands": 4,
+      "startup_seconds_from_job_creation": 1.0
+    }
+  ],
+  "l4_node": {
+    "created": "2026-09-14T09:06:29Z",
+    "deleted_by_down_sh_by": "2026-09-14T10:23:17Z",
+    "hours": 1.28
+  },
+  "system_node": {
+    "created": "2026-09-14T09:04:20Z",
+    "deleted_by_down_sh_by": "2026-09-14T10:23:17Z",
+    "hours": 1.316
+  },
+  "gpu_busy_hours": 1.048,
+  "cost_usd_list_price": {
+    "l4_node_on_demand": 1.09,
+    "system_node": 0.18,
+    "l4_busy_time_only": 0.89,
+    "l4_busy_time_only_spot": 0.54,
+    "excluded": "GKE cluster management fee ($0.10/h per cluster, offset by GKE's free-tier credit for one zonal cluster), Cloud Build minutes, network egress"
+  },
+  "note": "The L4 node also existed during scale-up and the 1-4 minute gaps between Jobs (1.28 h in total); gpu_busy_hours is what the experiments themselves used."
+}

@@ -116,13 +116,22 @@
     }
   ],
   "timings_s": {
-    "test_zero-shot_s": 140.79844416599371,
-    "finetune_s": 1250.281217958007,
-    "test_fine-tuned_s": 157.88493245799327,
-    "total_s": 1567.9974713750125
+    "model_load_s": 15.428507624994381,
+    "test_zero-shot_s": 52.01950445899274,
+    "finetune_s": 737.2461285419995,
+    "test_fine-tuned_s": 125.97108841699082,
+    "total_s": 931.5197634999931
+  },
+  "efficiency": {
+    "steps": 150,
+    "step_s_median": 3.867945188001613,
+    "step_s_mean": 4.206162316966414,
+    "validation_s_mean": 14.80874533899935,
+    "peak_memory_gb": 11.0370816
   },
   "environment": {
     "device": "mps",
+    "accelerator": "Apple M4 (MPS)",
     "torch": "2.14.0",
     "tabfm": "1.0.1",
     "python": "3.14.0",

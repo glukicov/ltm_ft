@@ -2,14 +2,16 @@
 
     uv run ltm-ft plot          # -> docs/figures/*.png
 
-Colours are the first two slots of a colour-vision-deficiency-validated categorical palette
-(zero-shot orange, fine-tuned blue); the ceiling is a neutral dashed line. Every series is
-labelled directly, so nothing depends on colour alone.
+Colours are the first three slots of a colour-vision-deficiency-validated categorical palette:
+zero-shot orange, fine-tuned (last 4 blocks) blue, fine-tuned with the encoders aqua. Every series
+also has its own marker shape and a direct label, so nothing depends on colour alone; the ceiling
+is a neutral dashed line or tick.
 """
 
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -19,109 +21,270 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 ZERO_SHOT = "#eb6834"
-FINE_TUNED = "#2a78d6"
+LAST4 = "#2a78d6"
+ENCODERS = "#1baf7a"
 CEILING = "#8a8983"
 INK = "#0b0b0b"
 MUTED = "#52514e"
 GRID = "#e4e3df"
 SURFACE = "#fcfcfb"
+MARKERS = {ZERO_SHOT: "o", LAST4: "s", ENCODERS: "D"}
 
 
-def _style(ax: Any) -> None:
+def _style(ax: Any, grid_axis: str = "y") -> None:
     ax.set_facecolor(SURFACE)
     for side in ("top", "right"):
         ax.spines[side].set_visible(False)
     for side in ("left", "bottom"):
         ax.spines[side].set_color(GRID)
     ax.tick_params(colors=MUTED, labelsize=10)
-    ax.grid(axis="y", color=GRID, linewidth=0.8)
+    ax.grid(axis=grid_axis, color=GRID, linewidth=0.8)
     ax.set_axisbelow(True)
 
 
-def validation_curve(tune_json: Path, out: Path, title: str) -> Path:
-    """Validation accuracy against fine-tuning step, with the zero-shot start and the ceiling marked."""
-    run = json.loads(tune_json.read_text())
-    steps = [h["step"] for h in run["history"]]
-    acc = [100 * h["val_accuracy"] for h in run["history"]]
-    ceiling = 100 * run["data"]["val_ceiling"]["accuracy"]
+def _save(fig: Any, out: Path) -> Path:
+    fig.tight_layout()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, facecolor=SURFACE)
+    plt.close(fig)
+    return out
 
+
+def _load(path: Path) -> dict[str, Any]:
+    return dict(json.loads(path.read_text()))
+
+
+def _test_metric(run: dict[str, Any], metric: str) -> tuple[float, float, float]:
+    """(zero-shot, fine-tuned, ceiling), in the order `run` writes them."""
+    zero, tuned, ceil = (v[metric] for v in run["test"].values())
+    return float(zero), float(tuned), float(ceil)
+
+
+def validation_curves(series: Sequence[tuple[str, Path, str]], out: Path, title: str) -> Path:
+    """Validation accuracy against step for several runs that share a split (same step-0 model and ceiling)."""
     fig, ax = plt.subplots(figsize=(8, 4.2), dpi=200, facecolor=SURFACE)
     _style(ax)
-    ax.axhline(acc[0], color=ZERO_SHOT, linewidth=1.5, linestyle=(0, (4, 3)))
+    first = _load(series[0][1])
+    zero = 100 * first["history"][0]["val_accuracy"]
+    ceiling = 100 * first["data"]["val_ceiling"]["accuracy"]
+    ax.axhline(zero, color=ZERO_SHOT, linewidth=1.5, linestyle=(0, (4, 3)))
     ax.axhline(ceiling, color=CEILING, linewidth=1.5, linestyle=(0, (4, 3)))
-    ax.plot(steps, acc, color=FINE_TUNED, linewidth=2, marker="o", markersize=6, markeredgecolor=SURFACE)
-    best = steps.index(run["best_step"])
+    last_step = 0
+    for label, path, color in series:
+        run = _load(path)
+        steps = [h["step"] for h in run["history"]]
+        acc = [100 * h["val_accuracy"] for h in run["history"]]
+        last_step = max(last_step, steps[-1])
+        ax.plot(steps, acc, color=color, linewidth=2, marker=MARKERS[color], markersize=6, markeredgecolor=SURFACE)
+        ax.annotate(
+            f"{label} {acc[-1]:.1f}%",
+            (steps[-1], acc[-1]),
+            xytext=(0, -17 if ceiling - acc[-1] < 3 else 9),
+            textcoords="offset points",
+            ha="right",
+            color=INK,
+            fontsize=10,
+        )
     ax.annotate(
         f"ceiling {ceiling:.1f}%",
-        (steps[-1], ceiling),
+        (0, ceiling),
         xytext=(0, 6),
-        textcoords="offset points",
-        ha="right",
-        color=INK,
-        fontsize=10,
-    )
-    ax.annotate(
-        f"zero-shot {acc[0]:.1f}%",
-        (steps[1], acc[0]),
-        xytext=(0, -16),
         textcoords="offset points",
         ha="left",
         color=INK,
         fontsize=10,
     )
-    ax.set_ylim(acc[0] - 3, ceiling + 2)
-    ax.scatter([steps[best]], [acc[best]], s=90, color=FINE_TUNED, edgecolor=INK, linewidth=1.5, zorder=4)
     ax.annotate(
-        f"kept: step {steps[best]}, {acc[best]:.1f}%",
-        (steps[best], acc[best]),
-        xytext=(0, 12),
+        f"zero-shot {zero:.1f}%",
+        (last_step, zero),
+        xytext=(0, -17),
         textcoords="offset points",
-        ha="center",
+        ha="right",
         color=INK,
         fontsize=10,
     )
+    ax.set_ylim(zero - 5, ceiling + 3)
     ax.set_xlabel("fine-tuning step", color=MUTED, fontsize=10)
     ax.set_ylabel("validation accuracy (%)", color=MUTED, fontsize=10)
     ax.set_title(title, loc="left", color=INK, fontsize=12, fontweight="bold")
-    fig.tight_layout()
-    out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, facecolor=SURFACE)
-    plt.close(fig)
-    return out
+    return _save(fig, out)
 
 
-def before_after(run_jsons: dict[str, Path], out: Path, title: str) -> Path:
-    """One row per task: zero-shot and fine-tuned test log loss (lower is better), with the ceiling as a tick."""
-    rows = []
-    for label, path in run_jsons.items():
-        values = list(json.loads(path.read_text())["test"].values())  # zero-shot, fine-tuned, ceiling
-        rows.append((label, *(v["log_loss"] for v in values)))
+def before_after(
+    panels: dict[str, dict[str, Path]], out: Path, title: str, notes: dict[str, dict[str, str]] | None = None
+) -> Path:
+    """Test accuracy per task and variant, one panel per machine: zero-shot, fine-tuned and the ceiling.
 
-    fig, ax = plt.subplots(figsize=(8, 1.4 + 1.1 * len(rows)), dpi=200, facecolor=SURFACE)
-    _style(ax)
-    ax.grid(axis="y", visible=False)
-    ax.grid(axis="x", color=GRID, linewidth=0.8)
-    label_kw: dict[str, Any] = {"textcoords": "offset points", "fontsize": 9, "color": INK}
-    for i, (_, zero, tuned, ceil) in enumerate(rows):
+    `panels` maps a machine label to {row label: results.json}; rows are matched by label across panels.
+    `notes` optionally explains a missing row per machine (default "not run").
+    """
+    row_labels = list(dict.fromkeys(label for rows in panels.values() for label in rows))
+    fig, axes = plt.subplots(
+        1,
+        len(panels),
+        figsize=(5.2 * len(panels), 1.2 + 0.95 * len(row_labels)),
+        dpi=200,
+        facecolor=SURFACE,
+        sharey=True,
+        squeeze=False,
+    )
+    for ax, (machine, rows) in zip(axes[0], panels.items(), strict=True):
+        _style(ax, grid_axis="x")
+        for i, label in enumerate(row_labels):
+            y = len(row_labels) - 1 - i
+            if label not in rows:
+                note = (notes or {}).get(machine, {}).get(label, "not run")
+                ax.annotate(note, (70, y), ha="center", va="center", color=MUTED, fontsize=9)
+                continue
+            run = _load(rows[label])
+            zero, tuned, ceil = (100 * v for v in _test_metric(run, "accuracy"))
+            color = ENCODERS if run["config"]["train_encoders"] else LAST4
+            ax.plot([min(zero, tuned), ceil], [y, y], color=GRID, linewidth=4, solid_capstyle="round", zorder=1)
+            ax.plot([ceil, ceil], [y - 0.22, y + 0.22], color=CEILING, linewidth=2, zorder=2)
+            ax.scatter([zero], [y], s=70, color=ZERO_SHOT, marker="o", edgecolor=SURFACE, linewidth=1.5, zorder=3)
+            ax.scatter(
+                [tuned], [y], s=70, color=color, marker=MARKERS[color], edgecolor=SURFACE, linewidth=1.5, zorder=4
+            )
+            text = f"{zero:.1f}% → {tuned:.1f}%"
+            ax.annotate(
+                text,
+                (min(zero, tuned), y),
+                xytext=(-10, 0),
+                textcoords="offset points",
+                ha="right",
+                va="center",
+                color=INK,
+                fontsize=9,
+            )
+        ax.set_xlim(40, 100)
+        ax.set_ylim(-0.7, len(row_labels) - 0.3)
+        ax.set_title(machine, loc="left", color=INK, fontsize=11, fontweight="bold")
+        ax.set_xlabel("test accuracy (%)", color=MUTED, fontsize=10)
+    axes[0][0].set_yticks(range(len(row_labels)), list(reversed(row_labels)), color=INK, fontsize=10)
+    fig.suptitle(title, x=0.01, ha="left", color=INK, fontsize=12, fontweight="bold")
+    return _save(fig, out)
+
+
+def efficiency(rows: Sequence[tuple[str, float, float, str]], out: Path, title: str) -> Path:
+    """Speed-up of the second machine over the first per measurement: (label, first s, second s, unit label)."""
+    fig, ax = plt.subplots(figsize=(8, 1.2 + 0.7 * len(rows)), dpi=200, facecolor=SURFACE)
+    _style(ax, grid_axis="x")
+    top = max(a / b for _, a, b, _ in rows)
+    for i, (_label, first, second, _unit) in enumerate(rows):
         y = len(rows) - 1 - i
-        ax.plot([ceil, zero], [y, y], color=GRID, linewidth=4, solid_capstyle="round", zorder=1)
-        ax.plot([ceil, ceil], [y - 0.2, y + 0.2], color=CEILING, linewidth=2, zorder=2)
-        ax.annotate(f"ceiling {ceil:.3f}", (ceil, y), xytext=(0, -24), ha="center", **{**label_kw, "color": MUTED})
-        ax.scatter([zero], [y], s=90, color=ZERO_SHOT, edgecolor=SURFACE, linewidth=2, zorder=3)
-        if abs(zero - tuned) < 5e-4:
-            ax.annotate(f"zero-shot = fine-tuned {zero:.3f}", (zero, y), xytext=(10, 10), ha="left", **label_kw)
-        else:
-            ax.scatter([tuned], [y], s=90, color=FINE_TUNED, edgecolor=SURFACE, linewidth=2, zorder=4)
-            ax.annotate(f"zero-shot {zero:.3f}", (zero, y), xytext=(8, 12), ha="left", **label_kw)
-            ax.annotate(f"fine-tuned {tuned:.3f}", (tuned, y), xytext=(-8, -20), ha="right", **label_kw)
+        ratio = first / second
+        ax.barh(y, ratio, height=0.55, color=LAST4, zorder=2)
+        ax.annotate(
+            f"{ratio:.1f}\u00d7   {_seconds(first)} → {_seconds(second)}",
+            (ratio, y),
+            xytext=(6, 0),
+            textcoords="offset points",
+            va="center",
+            ha="left",
+            color=INK,
+            fontsize=9,
+        )
+    ax.axvline(1, color=CEILING, linewidth=1.2, linestyle=(0, (4, 3)))
     ax.set_yticks(range(len(rows)), [r[0] for r in reversed(rows)], color=INK, fontsize=10)
-    ax.set_ylim(-0.7, len(rows) - 0.3)
-    lo, hi = min(min(r[1:]) for r in rows), max(max(r[1:]) for r in rows)
-    ax.set_xlim(lo - 0.05, hi + 0.12)
-    ax.set_xlabel("test log loss (lower is better)", color=MUTED, fontsize=10)
+    ax.set_xlim(0, top * 1.45)
+    ax.set_xlabel("times faster (dashed line: same speed)", color=MUTED, fontsize=10)
     ax.set_title(title, loc="left", color=INK, fontsize=12, fontweight="bold")
-    fig.tight_layout()
-    out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, facecolor=SURFACE)
-    plt.close(fig)
-    return out
+    return _save(fig, out)
+
+
+def _seconds(s: float) -> str:
+    if s >= 90:
+        return f"{s / 60:.1f} min"
+    return f"{s:.1f} s" if s >= 1 else f"{s:.2f} s"
+
+
+def seeds(rows: dict[str, tuple[Path, Path]], out: Path, title: str) -> Path:
+    """Per data seed: test accuracy zero-shot, fine-tuned last 4 blocks, fine-tuned with encoders, and the ceiling."""
+    fig, ax = plt.subplots(figsize=(8, 1.4 + 0.62 * len(rows)), dpi=200, facecolor=SURFACE)
+    _style(ax, grid_axis="x")
+    for i, (last4_path, encoders_path) in enumerate(rows.values()):
+        y = len(rows) - 1 - i
+        zero, last4, ceil = (100 * v for v in _test_metric(_load(last4_path), "accuracy"))
+        _, encoders, _ = (100 * v for v in _test_metric(_load(encoders_path), "accuracy"))
+        ax.plot([zero, ceil], [y, y], color=GRID, linewidth=3, zorder=1)
+        ax.plot([ceil, ceil], [y - 0.25, y + 0.25], color=CEILING, linewidth=2, zorder=2)
+        for value, color, name in (
+            (zero, ZERO_SHOT, "zero-shot"),
+            (last4, LAST4, "last 4 blocks"),
+            (encoders, ENCODERS, "+ encoders"),
+        ):
+            ax.scatter(
+                [value],
+                [y],
+                s=60,
+                color=color,
+                marker=MARKERS[color],
+                edgecolor=SURFACE,
+                linewidth=1.2,
+                zorder=3,
+                label=name if i == 0 else None,
+            )
+        ax.annotate(
+            f"{encoders:.1f}%",
+            (encoders, y),
+            xytext=(0, 9),
+            textcoords="offset points",
+            ha="center",
+            color=INK,
+            fontsize=8,
+        )
+    ax.set_yticks(range(len(rows)), list(reversed(rows)), color=INK, fontsize=10)
+    ax.set_xlim(40, 100)
+    ax.set_ylim(-0.7, len(rows) - 0.2)
+    ax.set_xlabel("test accuracy (%), grey tick = ceiling", color=MUTED, fontsize=10)
+    ax.legend(loc="lower left", frameon=False, fontsize=9, labelcolor=INK, ncols=3, bbox_to_anchor=(0, 1.0))
+    ax.set_title(title, loc="left", color=INK, fontsize=12, fontweight="bold", pad=26)
+    return _save(fig, out)
+
+
+def log_loss_curves(series: Sequence[tuple[str, Path]], out: Path, title: str) -> Path:
+    """Validation log loss against step for runs on different splits, with ln 2 marked: predicting 0.5 for every row."""
+    fig, ax = plt.subplots(figsize=(8, 4.2), dpi=200, facecolor=SURFACE)
+    _style(ax)
+    ax.axhline(0.6931, color=CEILING, linewidth=1.5, linestyle=(0, (4, 3)))
+    styles = ["-", "--", ":"]
+    markers = ["D", "s", "o"]
+    last_step = 0
+    for i, (label, path) in enumerate(series):
+        run = _load(path)
+        steps = [h["step"] for h in run["history"]]
+        loss = [h["val_log_loss"] for h in run["history"]]
+        last_step = max(last_step, steps[-1])
+        ax.plot(
+            steps,
+            loss,
+            color=ENCODERS,
+            linewidth=2,
+            linestyle=styles[i % 3],
+            marker=markers[i % 3],
+            markersize=5,
+            markeredgecolor=SURFACE,
+        )
+        ax.annotate(
+            label,
+            (steps[-1], loss[-1]),
+            xytext=(-4, 10 if loss[-1] < 0.6 else -16 - 13 * i),
+            textcoords="offset points",
+            ha="right",
+            color=INK,
+            fontsize=10,
+        )
+    ax.annotate(
+        "predicting 0.5 for every row (log loss ln 2)",
+        (0, 0.6931),
+        xytext=(0, 7),
+        textcoords="offset points",
+        ha="left",
+        color=MUTED,
+        fontsize=9,
+    )
+    ax.set_ylim(0, 0.8)
+    ax.set_xlabel("fine-tuning step (no early stopping)", color=MUTED, fontsize=10)
+    ax.set_ylabel("validation log loss (lower is better)", color=MUTED, fontsize=10)
+    ax.set_title(title, loc="left", color=INK, fontsize=12, fontweight="bold")
+    return _save(fig, out)

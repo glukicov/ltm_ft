@@ -1,0 +1,32 @@
+{
+  "job": "ltm-ft-20260914-090533",
+  "gpu": "1x NVIDIA L4 (g2-standard-8, GKE node pool scaling from zero)",
+  "seconds_since_job_created": {
+    "scale_up_triggered": 23.0,
+    "gpu_node_created": 53.0,
+    "pod_scheduled": 104.0,
+    "image_pull_started": 105.0,
+    "image_pulled": 228.0,
+    "container_started": 228.0,
+    "all_commands_done": 752.0
+  },
+  "image_pull_seconds": 123.229,
+  "commands": [
+    {
+      "command": "ltm-ft run --task checkerboard --name l4/checkerboard",
+      "seconds": 171.0
+    },
+    {
+      "command": "ltm-ft run --task runners --name l4/runners",
+      "seconds": 118.0
+    },
+    {
+      "command": "ltm-ft precision --task checkerboard --name l4/precision/checkerboard",
+      "seconds": 54.0
+    },
+    {
+      "command": "ltm-ft run --task checkerboard --train-encoders --name l4/checkerboard_encoders",
+      "seconds": 174.0
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# kubectl against the ltm-ft GKE cluster, via the dedicated kubeconfig.
+set -euo pipefail
+# shellcheck source=k8s/gke/env.sh
+source "$(cd "$(dirname "$0")" && pwd)/env.sh"
+exec kubectl --context "$CTX" "$@"

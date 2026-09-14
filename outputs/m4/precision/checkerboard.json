@@ -27,6 +27,7 @@
   },
   "environment": {
     "device": "mps",
+    "accelerator": "Apple M4 (MPS)",
     "torch": "2.14.0",
     "tabfm": "1.0.1",
     "python": "3.14.0",

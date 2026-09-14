@@ -1,12 +1,12 @@
-# runners (runners)
+# l4/seeds/encoders_data17 (checkerboard)
 
 3,000 held-out rows. Lower log loss is better; higher ROC AUC and accuracy are better.
 
 | Model | Log loss | ROC AUC | Accuracy |
 |---|---|---|---|
-| TabFM zero-shot | 0.5267 | 0.8240 | 74.8% |
-| TabFM fine-tuned (last 4 ICL blocks, step 0) | 0.5267 | 0.8240 | 74.8% |
-| Generator's true probabilities (ceiling) | 0.4732 | 0.8537 | 77.8% |
+| TabFM zero-shot | 0.3227 | 0.9381 | 88.5% |
+| TabFM fine-tuned (last 4 ICL blocks + encoders, step 0) | 0.3227 | 0.9381 | 88.5% |
+| Generator's true probabilities (ceiling) | 0.1916 | 0.9523 | 95.2% |
 
 Fine-tuned minus zero-shot, with 95% paired-bootstrap intervals over test rows:
 

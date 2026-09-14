@@ -33,6 +33,7 @@ from torch import nn
 
 from ltm_ft.data import Split, features, labels
 from ltm_ft.evaluate import predict_positive, score
+from ltm_ft.hardware import memory_gb, reset_peak_memory, synchronize
 from ltm_ft.model import freeze, load_trainable_state, prepare_for_finetuning, trainable_state
 
 # The classifier builds this many views per fit (one per normalisation method); each step uses one.
@@ -153,6 +154,19 @@ class FinetuneResult:
     history: list[dict[str, float]]
     best_step: int
     stopped_early: bool
+    step_seconds: list[float]  # wall clock per gradient step, synchronized: episode build + forward + backward + update
+    validation_seconds: list[float]  # wall clock per validation pass (full training set as context)
+    peak_memory_gb: float | None  # accelerator memory high-water mark (sampled on MPS, exact on CUDA)
+
+    def efficiency(self) -> dict[str, float | int | None]:
+        steps = np.asarray(self.step_seconds)
+        return {
+            "steps": len(steps),
+            "step_s_median": float(np.median(steps)) if len(steps) else None,
+            "step_s_mean": float(steps.mean()) if len(steps) else None,
+            "validation_s_mean": float(np.mean(self.validation_seconds)) if self.validation_seconds else None,
+            "peak_memory_gb": self.peak_memory_gb,
+        }
 
 
 def finetune(
@@ -180,9 +194,22 @@ def finetune(
     if episode_rows > len(X_train):
         raise ValueError(f"context_size + query_size ({episode_rows}) exceeds the {len(X_train)} training rows")
 
+    step_seconds: list[float] = []
+    validation_seconds: list[float] = []
+    peak_memory: list[float] = []
+
+    def sample_memory() -> None:
+        gb = memory_gb(device)
+        if gb is not None:
+            peak_memory.append(gb)
+
     def validate(step: int, train_loss: float) -> float:
+        synchronize(device)
         t0 = time.perf_counter()
         p = predict_positive(model, split.train, split.val, config.n_estimators_val, config.seed)
+        synchronize(device)
+        validation_seconds.append(time.perf_counter() - t0)
+        sample_memory()
         metrics = score(labels(split.val), p)
         history.append(
             {"step": step, "train_loss": train_loss, **{f"val_{k}": v for k, v in metrics.as_dict().items()}}
@@ -197,7 +224,9 @@ def finetune(
     best_loss, best_step, best_state = validate(0, float("nan")), 0, trainable_state(model)
     bad_evals, stopped_early, recent_losses = 0, False, []
 
+    reset_peak_memory(device)
     for step in range(1, config.max_steps + 1):
+        synchronize(device)
         t0 = time.perf_counter()
         rows = rng.permutation(len(X_train))[:episode_rows]
         ctx, qry = rows[: config.context_size], rows[config.context_size :]
@@ -213,10 +242,10 @@ def finetune(
         optimizer.zero_grad(set_to_none=True)
         master.masters_to_params()
         recent_losses.append(loss.item())
-        log(
-            f"step {step:>3}  loss {loss.item():.4f}  lr {scheduler.get_last_lr()[0]:.2e}  "
-            f"({time.perf_counter() - t0:.0f}s)"
-        )
+        synchronize(device)
+        step_seconds.append(time.perf_counter() - t0)
+        sample_memory()
+        log(f"step {step:>3}  loss {loss.item():.4f}  lr {scheduler.get_last_lr()[0]:.2e}  ({step_seconds[-1]:.1f}s)")
 
         if step % config.eval_every == 0 or step == config.max_steps:
             val_loss = validate(step, float(np.mean(recent_losses)))
@@ -233,4 +262,11 @@ def finetune(
     load_trainable_state(model, best_state)
     freeze(model)
     log(f"restored the weights from step {best_step} (val log loss {best_loss:.4f})")
-    return FinetuneResult(history=history, best_step=best_step, stopped_early=stopped_early)
+    return FinetuneResult(
+        history=history,
+        best_step=best_step,
+        stopped_early=stopped_early,
+        step_seconds=step_seconds,
+        validation_seconds=validation_seconds,
+        peak_memory_gb=max(peak_memory) if peak_memory else None,
+    )
