@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Build provenance: write it with `scripts/cite.py --stamp <deck> --repo .` so check.py
+     can report which slides have gone stale. See references/freshness.md. -->
+<meta name="slideops-build" content="commit=63f52a2 date=2026-09-14 repo=ltm_ft">
+<title>Fine-tuning TabFM on a laptop</title>
+<style>
+  /* ── THEME ─────────────────────────────────────────────────────────────────
+     The :root block below is the ENTIRE theme: every color in the deck derives
+     from these tokens (soft tints/borders via color-mix), so switching theme
+     means replacing this one block. Preset palettes (Ledger Light default,
+     Ledger Dark, midnight, graphite) live in references/themes.md; brand
+     extraction rules live in references/style-guide.md § Theming.
+     Do not invent colors and do not reintroduce hex/rgba literals below
+     this block. */
+  :root{
+    /* surfaces */
+    --bg:#faf6ee; --bg2:#f2ecdf; --card:#ffffff; --code-bg:#2b2820;
+    --stage-1:#e8e0cf; --stage-2:#cfc6b2;           /* backdrop behind the deck */
+    --section-1:#f4eede; --section-2:#e6dcc6;       /* section-divider gradient */
+    /* text */
+    --fg:#2b2620;        /* headings */
+    --text:#3d372e;      /* body copy */
+    --strong:#171310;    /* bold/emphasis; the darkest ink */
+    --muted:#8a8069;
+    /* roles */
+    --accent:#7a7f1f; --accent2:#5f6419; --warn:#a34a3f; --bad:#b5544a;
+    /* code block: dark blocks sit on the light surfaces for contrast */
+    --code-fg:#e8dfc0; --code-comment:#948b74; --code-keyword:#d3c87a; --code-string:#c9b98a;
+    /* title gradient */
+    --grad-1:#2b2620; --grad-2:#7a7f1f;
+    /* misc */
+    --card-border:color-mix(in srgb, var(--muted) 30%, transparent);
+    --img-bg:#ffffff;                                /* backing behind embedded images */
+    --shadow:rgba(60,50,30,.25);
+    --radius:14px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "SFMono-Regular", Consolas, Menlo, "Liberation Mono", monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--stage-2);color:var(--fg);font-family:var(--font);height:100%;overflow:hidden;}
+  .stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 0%, var(--stage-1) 0%, var(--stage-2) 70%);}
+  .deck{position:relative;width:1280px;height:720px;transform-origin:center center;box-shadow:0 30px 90px var(--shadow);border-radius:6px;overflow:hidden;background:linear-gradient(160deg,var(--bg) 0%, var(--bg2) 100%);}
+  .slide{position:absolute;inset:0;padding:64px 76px 56px;display:flex;flex-direction:column;opacity:0;visibility:hidden;transition:opacity .25s ease;}
+  .slide.active{opacity:1;visibility:visible;}
+  .kicker{font-size:14px;letter-spacing:.12em;color:var(--accent);font-weight:700;margin:0 0 10px;display:flex;align-items:center;gap:10px;}
+  h1{font-size:44px;line-height:1.15;margin:0 0 14px;font-weight:800;letter-spacing:-.01em;}
+  h2{font-size:34px;line-height:1.2;margin:0 0 18px;font-weight:800;letter-spacing:-.01em;}
+  h3{font-size:20px;margin:0 0 8px;font-weight:700;color:var(--fg);}
+  .subtitle{font-size:19px;color:var(--muted);margin:0 0 6px;line-height:1.5;}
+  .body{flex:1;min-height:0;display:flex;flex-direction:column;gap:16px;}
+  p{margin:0 0 10px;line-height:1.55;font-size:17px;color:var(--text);}
+  ul,ol{margin:0 0 8px;padding-left:22px;}
+  li{margin-bottom:8px;line-height:1.5;font-size:17px;color:var(--text);}
+  li b, p b, td b{color:var(--strong);}
+  .muted{color:var(--muted);}
+  .small{font-size:14px;}
+  /* Status tags: use sparingly and accurately. Don't call something "major"
+     or "critical" unless it genuinely is; a wrong badge is worse than none. */
+  .tag{display:inline-block;font-size:12px;font-weight:800;letter-spacing:.06em;padding:4px 10px;border-radius:999px;border:1px solid transparent;}
+  .tag-new{background:color-mix(in srgb, var(--accent) 13%, transparent);color:var(--accent);border-color:color-mix(in srgb, var(--accent) 40%, transparent);}
+  .tag-major{background:color-mix(in srgb, var(--warn) 14%, transparent);color:var(--warn);border-color:color-mix(in srgb, var(--warn) 45%, transparent);}
+  .tag-existing{background:color-mix(in srgb, var(--accent2) 13%, transparent);color:var(--accent2);border-color:color-mix(in srgb, var(--accent2) 40%, transparent);}
+  .tag-optional{background:color-mix(in srgb, var(--muted) 14%, transparent);color:color-mix(in srgb, var(--muted) 55%, var(--fg));border-color:color-mix(in srgb, var(--muted) 40%, transparent);}
+  .tag-critical{background:color-mix(in srgb, var(--bad) 14%, transparent);color:var(--bad);border-color:color-mix(in srgb, var(--bad) 45%, transparent);}
+
+  .card{background:var(--card);border:1px solid var(--card-border);border-radius:var(--radius);padding:18px 20px;}
+  .card.tint-accent{background:color-mix(in srgb, var(--accent) 8%, transparent);border-color:color-mix(in srgb, var(--accent) 40%, transparent);}
+  .card.tint-warn{background:color-mix(in srgb, var(--warn) 8%, transparent);border-color:color-mix(in srgb, var(--warn) 35%, transparent);}
+  /* Grids default to content height so trailing content never gets pushed under
+     the nav pill. Add the "fill" class only when a grid should stretch to fill
+     the remaining slide height (e.g. tall code comparisons). */
+  .cols-2{display:grid;grid-template-columns:1fr 1fr;gap:20px;flex:0 0 auto;min-height:0;}
+  .cols-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;flex:0 0 auto;min-height:0;}
+  .cols-2.fill,.cols-3.fill{flex:1;}
+  .col{display:flex;flex-direction:column;gap:12px;min-height:0;}
+  .stat{display:flex;flex-direction:column;gap:2px;}
+  .stat .num{font-size:38px;font-weight:800;color:var(--accent);line-height:1;}
+  .stat .lbl{font-size:13px;color:var(--muted);letter-spacing:.06em;}
+  .stat-row{display:flex;gap:22px;flex-wrap:wrap;}
+
+  pre.code{background:var(--code-bg);border:1px solid var(--card-border);border-radius:10px;padding:14px 16px;overflow:hidden;font-family:var(--mono);font-size:14.5px;line-height:1.55;color:var(--code-fg);}
+  pre.code.small{font-size:12.5px;line-height:1.5;}
+  pre.code .c{color:var(--code-comment);} /* comments */
+  pre.code .k{color:var(--code-keyword);} /* keywords */
+  pre.code .s{color:var(--code-string);} /* strings */
+  pre.code .n{color:var(--code-string);} /* names/literals */
+  code.inline{font-family:var(--mono);background:color-mix(in srgb, var(--muted) 15%, transparent);padding:1px 6px;border-radius:5px;font-size:.92em;color:color-mix(in srgb, var(--accent2) 55%, var(--fg));}
+
+  table{width:100%;border-collapse:collapse;font-size:14.5px;}
+  th{text-align:left;color:var(--accent2);font-size:12px;letter-spacing:.05em;padding:6px 10px;border-bottom:1px solid var(--card-border);}
+  td{padding:7px 10px;border-bottom:1px solid color-mix(in srgb, var(--muted) 10%, transparent);color:var(--text);vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  td code.inline, th code.inline{white-space:nowrap;}
+
+  /* Simple box-and-arrow diagrams. Keep these plain: no SVG, no external
+     diagramming libs. A row of .flow-box separated by .flow-arrow; stack rows
+     for multi-step flows; .flow-vert-arrow for a row-to-row down arrow. */
+  .flow{display:flex;align-items:center;justify-content:center;gap:0;flex-wrap:nowrap;}
+  .flow-box{background:var(--card);border:1px solid var(--card-border);border-radius:12px;padding:14px 16px;text-align:center;flex:1;min-width:0;}
+  .flow-box .t{font-weight:700;font-size:15px;color:var(--strong);margin-bottom:4px;}
+  .flow-box .d{font-size:12.5px;color:var(--muted);line-height:1.35;}
+  .flow-box.accent{border-color:color-mix(in srgb, var(--accent) 50%, transparent);background:color-mix(in srgb, var(--accent) 8%, transparent);}
+  .flow-box.warn{border-color:color-mix(in srgb, var(--warn) 50%, transparent);background:color-mix(in srgb, var(--warn) 8%, transparent);}
+  .flow-arrow{flex:0 0 auto;color:var(--muted);font-size:22px;padding:0 10px;}
+  .flow-vert-arrow{color:var(--muted);font-size:20px;padding:4px 0;}
+
+  /* Lane diagram: for "where X applies vs. doesn't" / critical-path-vs-optional
+     comparisons: one labeled row per case. */
+  .lane{display:flex;align-items:center;gap:14px;margin-bottom:14px;}
+  .lane-label{width:150px;flex:0 0 150px;font-size:12px;letter-spacing:.05em;font-weight:800;text-align:right;padding-right:6px;}
+  .lane-label.critical{color:var(--bad);}
+  .lane-label.parallel{color:var(--accent2);}
+  .lane-label.optional{color:var(--muted);}
+  .lane-track{flex:1;display:flex;align-items:center;gap:0;background:color-mix(in srgb, var(--strong) 2%, transparent);border-radius:12px;padding:10px 14px;border:1px dashed color-mix(in srgb, var(--muted) 22%, transparent);}
+
+  .section-slide{align-items:center;justify-content:center;text-align:center;background:radial-gradient(ellipse at 50% 40%, var(--section-1) 0%, var(--section-2) 75%);}
+  .section-slide .num{font-size:15px;color:var(--accent);font-weight:800;letter-spacing:.2em;margin-bottom:18px;}
+  .section-slide h1{font-size:52px;}
+  .section-slide .subtitle{font-size:20px;max-width:760px;}
+
+  .title-slide{align-items:center;justify-content:center;text-align:center;}
+  .title-slide h1{font-size:58px;}
+  .title-slide h1 .grad{background:linear-gradient(90deg,var(--grad-1),var(--grad-2));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .title-slide .logo-row{display:flex;gap:12px;margin-bottom:26px;}
+
+  .img-wrap{flex:1;display:flex;align-items:center;justify-content:center;min-height:0;}
+  .img-wrap img{max-width:100%;max-height:100%;object-fit:contain;border-radius:10px;border:1px solid var(--card-border);background:var(--img-bg);}
+  .img-wrap svg{max-width:100%;max-height:100%;height:auto;}
+  .img-placeholder{flex:1;align-self:stretch;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;border:2px dashed var(--card-border);border-radius:10px;color:var(--muted);font-size:15px;}
+  .caption{text-align:center;color:var(--muted);font-size:15px;margin-top:10px;}
+
+  .list-check li{list-style:none;position:relative;padding-left:26px;}
+  .list-check li:before{content:"✓";position:absolute;left:0;color:var(--accent);font-weight:800;}
+  .list-todo li{list-style:none;position:relative;padding-left:26px;}
+  .list-todo li:before{content:"→";position:absolute;left:0;color:var(--accent2);font-weight:800;}
+  .list-x li{list-style:none;position:relative;padding-left:26px;}
+  .list-x li:before{content:"✕";position:absolute;left:0;color:var(--bad);font-weight:800;}
+
+  /* Speaker notes: add <aside class="notes">…</aside> anywhere in a slide;
+     invisible until the presenter presses N (and always excluded from
+     screenshots/PDF unless toggled). */
+  .notes{display:none;}
+  .deck.show-notes .slide.active .notes{display:block;position:absolute;left:24px;right:24px;bottom:76px;background:color-mix(in srgb, var(--code-bg) 92%, transparent);border:1px solid var(--card-border);border-radius:10px;padding:12px 16px;font-size:14px;line-height:1.5;color:var(--muted);z-index:5;}
+  /* Overview grid: Esc toggles, #overview deep-links. Uses zoom so the
+     layout box scales with the render (supported in all evergreen browsers). */
+  .deck.overview{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px;overflow-y:auto;align-content:start;}
+  .deck.overview .slide{position:relative;inset:auto;zoom:0.2266;opacity:1;visibility:visible;transition:none;cursor:pointer;border:2px solid var(--card-border);border-radius:18px;}
+
+  /* HUD / navigation: do not remove; every slide relies on the JS below */
+  .progress{position:fixed;top:0;left:0;height:4px;background:var(--accent);z-index:50;transition:width .2s ease;box-shadow:0 0 12px color-mix(in srgb, var(--accent) 60%, transparent);}
+  .hud{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:16px;background:color-mix(in srgb, var(--bg) 85%, transparent);backdrop-filter:blur(6px);border:1px solid var(--card-border);padding:8px 14px;border-radius:999px;z-index:60;}
+  .nav-btn{background:color-mix(in srgb, var(--strong) 6%, transparent);border:1px solid var(--card-border);color:var(--fg);width:34px;height:34px;border-radius:50%;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;}
+  .nav-btn:hover{background:color-mix(in srgb, var(--accent) 25%, transparent);}
+  .counter{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:56px;text-align:center;}
+  .hint{position:fixed;top:16px;right:20px;font-size:12px;color:var(--muted);z-index:60;opacity:.7;}
+</style>
+</head>
+<body>
+
+<div class="progress" id="progressBar"></div>
+<div class="hint">← → or click · Esc overview · N notes</div>
+
+<div class="stage">
+  <div class="deck" id="deck">
+    <!-- SLIDES START (replace everything between this marker and SLIDES END;
+         leave everything outside the markers untouched).
+         Remember: HTML-escape every verbatim code snippet (& < > → &amp; &lt; &gt;). -->
+
+    <!-- 0: TITLE -->
+    <section class="slide title-slide">
+      <div class="logo-row">
+        <span class="tag tag-new">ltm_ft</span>
+        <span class="tag tag-existing">TabFM v1.0.0 · Apple M4</span>
+      </div>
+      <h1>Fine-tuning a tabular foundation model<br><span class="grad">on a laptop</span></h1>
+      <p class="subtitle">Reading not your game? Slides instead. Zero-shot vs fine-tuned TabFM on synthetic tables where the best achievable score is known.</p>
+      <p class="small muted" style="margin-top:26px;">Gleb Lukicov · github.com/glukicov/ltm_ft</p>
+      <aside class="notes">Follow-up to glukicov/ltm, where TabFM matched CatBoost with no training. Here we train it.</aside>
+    </section>
+
+    <!-- 1: RESULTS AT A GLANCE -->
+    <section class="slide">
+      <div class="kicker">Results at a glance</div>
+      <h2>Fine-tuning helped where TabFM was weak, and did nothing where it was strong</h2>
+      <div class="img-wrap"><img src="../figures/before_after.png" alt="Test log loss for zero-shot and fine-tuned TabFM on the runners and checkerboard tasks, with the ceiling marked"></div>
+      <p class="caption" data-src="outputs/checkerboard/results.json" data-sha256="e628887b11ec">Same 3,000 test rows per task. Checkerboard log loss 0.614 → 0.593 (ceiling 0.202); runners unchanged at 0.527 (ceiling 0.473).</p>
+    </section>
+
+    <!-- 2: THE QUESTION -->
+    <section class="slide">
+      <div class="kicker">The question</div>
+      <h2>TabFM already learns in context, so what does training add?</h2>
+      <div class="body">
+        <div class="card">
+          <p style="font-size:19px;margin:0;">TabFM predicts a row from labelled context rows in one forward pass, with no training step. Fine-tuning keeps that interface and trains it on your table.</p>
+        </div>
+        <div class="cols-2">
+          <div class="card"><h3>Last time: glukicov/ltm</h3><p class="small" style="margin:0;">Zero-shot TabFM matched a trained CatBoost model on penguins and on synthetic runners, without training, tuning or a model file.</p></div>
+          <div class="card"><h3>The paper: arXiv 2506.08982</h3><p class="small" style="margin:0;">Full fine-tuning makes TabPFNv2 state of the art on academic benchmarks; on small datasets the gains are often statistically insignificant.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3: RECIPE -->
+    <section class="slide">
+      <div class="kicker">The recipe</div>
+      <h2>Every step is one in-context episode, scored on its query rows</h2>
+      <div class="body" style="justify-content:center;gap:4px;">
+        <div class="flow">
+          <div class="flow-box"><div class="t">1,500 training rows</div><div class="d">labels known</div></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-box accent"><div class="t">Episode</div><div class="d">512 context rows + 256 query rows</div></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-box"><div class="t">Stock preprocessing</div><div class="d">TabFMClassifier encoders, one random ensemble view</div></div>
+        </div>
+        <div class="flow" style="justify-content:flex-end;padding-right:120px;"><div class="flow-vert-arrow">↓</div></div>
+        <div class="flow">
+          <div class="flow-box"><div class="t">Keep the best step</div><div class="d">validate every 25 steps, all 1,500 rows as context</div></div>
+          <div class="flow-arrow">←</div>
+          <div class="flow-box"><div class="t">AdamW</div><div class="d">lr 3e-4, wd 0.01, clip 1.0, warmup + cosine</div></div>
+          <div class="flow-arrow">←</div>
+          <div class="flow-box accent"><div class="t">Cross-entropy</div><div class="d">on the query rows' logits only</div></div>
+        </div>
+      </div>
+      <p class="small muted" style="text-align:center;margin-top:14px;">src/ltm_ft/finetune.py · a test asserts episode logits equal the stock classifier's</p>
+    </section>
+
+    <!-- 4: TRAINING STEP CODE -->
+    <section class="slide">
+      <div class="kicker">The recipe</div>
+      <h2>The training step calls the unmodified model</h2>
+      <div class="body">
+        <div class="tag tag-existing" style="align-self:flex-start;">src/ltm_ft/finetune.py</div>
+        <pre class="code small" style="margin:0;"
+             data-src="src/ltm_ft/finetune.py:207-214" data-sha256="ffdfe09b9ff0">loss = episode_loss(model, episode)
+loss.backward()  # type: ignore[no-untyped-call]
+master.gradients_to_masters()
+torch.nn.utils.clip_grad_norm_(master.masters, config.grad_clip)
+optimizer.step()
+scheduler.step()
+optimizer.zero_grad(set_to_none=True)
+master.masters_to_params()</pre>
+        <div class="cols-2">
+          <div class="card"><p class="small" style="margin:0;"><b>No custom forward:</b> frozen parameters do not require gradients, so autograd records nothing until the first trainable block.</p></div>
+          <div class="card"><p class="small" style="margin:0;"><b>Master weights:</b> gradients move to float32 copies, AdamW updates those, and the rounded values go back into the bf16 model.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5: MEMORY -->
+    <section class="slide">
+      <div class="kicker">The laptop problem</div>
+      <h2>1.64B parameters do not fit AdamW in 24 GB; 277M do</h2>
+      <div class="body">
+        <table>
+          <tr><th>What is trained</th><th>Trainable</th><th>Outcome on a 24 GB M4</th></tr>
+          <tr><td>Everything</td><td>1.64B</td><td>~26 GB for weights, gradients and two Adam moments: does not fit</td></tr>
+          <tr><td>Last 4 of 24 ICL blocks + head</td><td>277M</td><td>~10 GB peak, 15–30 s per step <span class="tag tag-new">used</span></td></tr>
+          <tr><td>… + row/column encoders</td><td>297M</td><td>Backward through all 24 blocks: 249 s per step, swapping</td></tr>
+        </table>
+        <p class="small muted" style="margin:0;">1.62B of the 1.64B parameters sit in the in-context-learning transformer. The paper found partial fine-tuning close to full fine-tuning.</p>
+      </div>
+    </section>
+
+    <!-- 6: RUNNERS -->
+    <section class="slide">
+      <div class="kicker">Round 1 · realistic table</div>
+      <h2>On the runners table, every fine-tuning step made validation worse</h2>
+      <div class="body">
+        <table data-src="outputs/runners/results.json" data-sha256="df6cd016da2a">
+          <tr><th>3,000 test rows</th><th>Log loss</th><th>ROC AUC</th><th>Accuracy</th></tr>
+          <tr><td>TabFM zero-shot</td><td>0.5267</td><td>0.8240</td><td>74.8%</td></tr>
+          <tr><td>TabFM fine-tuned (early stopping kept step 0)</td><td>0.5267</td><td>0.8240</td><td>74.8%</td></tr>
+          <tr><td>Generator's true probabilities (ceiling)</td><td>0.4732</td><td>0.8537</td><td>77.8%</td></tr>
+        </table>
+        <div class="card tint-warn"><p class="small" style="margin:0;"><b>Validation log loss:</b> 0.4651 at step 0; 0.4712, 0.4684 and 0.4683 at steps 25, 50 and 75. Three evaluations without improvement stopped the run.</p></div>
+      </div>
+    </section>
+
+    <!-- 7: JUNK COLUMNS -->
+    <section class="slide">
+      <div class="kicker">Round 1 · realistic table</div>
+      <h2>TabFM ignored 100 appended columns of pure noise</h2>
+      <div class="body" style="justify-content:center;">
+        <div class="stat-row" data-src="outputs/tune/runners_zero_shot_noise100.json" data-sha256="93667e9e0b81">
+          <div class="card stat"><span class="num">0.4651 → 0.4672</span><span class="lbl">validation log loss</span></div>
+          <div class="card stat"><span class="num">76.4% → 75.8%</span><span class="lbl">validation accuracy</span></div>
+          <div class="card stat"><span class="num">0.8554 → 0.8556</span><span class="lbl">validation ROC AUC</span></div>
+        </div>
+        <div class="card"><p class="small" style="margin:0;">Zero-shot, 21 real columns vs the same rows with 100 extra noise columns (<code class="inline">--noise-columns 100</code>). Distractors were not a weakness to fine-tune away either.</p></div>
+      </div>
+    </section>
+
+    <!-- 8: CHECKERBOARD TASK -->
+    <section class="slide">
+      <div class="kicker">Round 2 · a table TabFM is bad at</div>
+      <h2>The checkerboard leaves zero-shot TabFM 26 points below the ceiling</h2>
+      <div class="body">
+        <div class="card">
+          <p style="font-size:19px;margin:0;">Ten uniform features. The label depends only on which square of a 6×6 board the first two fall in: P(yes) is sigmoid(+3) on white squares, sigmoid(−3) on black.</p>
+        </div>
+        <div class="cols-2">
+          <div class="card"><h3>Why it is hard</h3><p class="small" style="margin:0;">Neither feature is informative alone, and a row's nearest neighbours in ten dimensions are mostly on other squares.</p></div>
+          <div class="card" data-src="outputs/checkerboard/results.json" data-sha256="e628887b11ec"><h3>The gap</h3><p class="small" style="margin:0;">Test accuracy: zero-shot 69.1%, ceiling 94.9%. Log loss: 0.614 vs 0.202.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 9: VALIDATION CURVE -->
+    <section class="slide">
+      <div class="kicker">Round 2 · a table TabFM is bad at</div>
+      <h2>Validation improved for 75 steps, then plateaued</h2>
+      <div class="img-wrap"><img src="../figures/checkerboard_validation.png" alt="Checkerboard validation accuracy against fine-tuning step, with zero-shot and ceiling lines"></div>
+      <p class="caption" data-src="outputs/tune/checkerboard_b4_lr3e-4.json" data-sha256="0603396446c2">500 validation rows. Log loss 0.6077 at step 0, 0.5837 at step 75 (kept), 0.5866 at step 150.</p>
+    </section>
+
+    <!-- 10: TEST RESULT -->
+    <section class="slide">
+      <div class="kicker">Round 2 · a table TabFM is bad at</div>
+      <h2>On 3,000 test rows, log loss and ROC AUC improved significantly</h2>
+      <div class="body" data-src="outputs/checkerboard/results.json" data-sha256="e628887b11ec">
+        <table>
+          <tr><th>3,000 test rows</th><th>Log loss</th><th>ROC AUC</th><th>Accuracy</th></tr>
+          <tr><td>TabFM zero-shot</td><td>0.6140</td><td>0.7642</td><td>69.1%</td></tr>
+          <tr><td><b>TabFM fine-tuned</b> (step 75)</td><td><b>0.5934</b></td><td><b>0.7721</b></td><td>69.7%</td></tr>
+          <tr><td>Ceiling</td><td>0.2016</td><td>0.9490</td><td>94.9%</td></tr>
+        </table>
+        <table>
+          <tr><th>Fine-tuned minus zero-shot</th><th>Δ</th><th>95% paired-bootstrap interval</th></tr>
+          <tr><td>Log loss</td><td>−0.021</td><td>[−0.024, −0.018] <span class="tag tag-new">significant</span></td></tr>
+          <tr><td>ROC AUC</td><td>+0.008</td><td>[+0.002, +0.014] <span class="tag tag-new">significant</span></td></tr>
+          <tr><td>Accuracy</td><td>+0.6 pts</td><td>[−0.6, +1.8] <span class="tag tag-optional">within noise</span></td></tr>
+        </table>
+      </div>
+    </section>
+
+    <!-- 11: PRECISION TRAP -->
+    <section class="slide">
+      <div class="kicker">The trap</div>
+      <h2>The same checkpoint computed in float32 loses 11 AUC points</h2>
+      <div class="body">
+        <table data-src="outputs/precision/checkerboard.json" data-sha256="414e5f25b3c1">
+          <tr><th>Checkerboard, zero-shot, 500 validation rows</th><th>Log loss</th><th>ROC AUC</th><th>Accuracy</th></tr>
+          <tr><td>bfloat16 (library default)</td><td>0.6077</td><td>0.7749</td><td>70.2%</td></tr>
+          <tr><td>float32 (<code class="inline">dtype=None</code>)</td><td>0.6495</td><td>0.6658</td><td>59.8%</td></tr>
+        </table>
+        <div class="card tint-warn"><p class="small" style="margin:0;"><b>Why it matters:</b> "upcast the weights you train to float32" is the textbook move. Here it changes the model before the first gradient step, and a run could "improve" from 60% back to 70% without learning anything.</p></div>
+      </div>
+    </section>
+
+    <!-- 12: MASTER WEIGHTS FIX -->
+    <section class="slide">
+      <div class="kicker">The fix</div>
+      <h2>Keep the model in bf16 and the optimiser's copies in float32</h2>
+      <div class="body">
+        <div class="tag tag-existing" style="align-self:flex-start;">src/ltm_ft/finetune.py · class Float32Master</div>
+        <pre class="code small" style="margin:0;"
+             data-src="src/ltm_ft/finetune.py:136-148" data-sha256="44d3f8879d63">def __init__(self, params: list[nn.Parameter]) -&gt; None:
+    self.params = params
+    self.masters = [p.detach().float().clone() for p in params]
+
+def gradients_to_masters(self) -&gt; None:
+    for p, m in zip(self.params, self.masters, strict=True):
+        m.grad = None if p.grad is None else p.grad.float()
+        p.grad = None
+
+@torch.no_grad()
+def masters_to_params(self) -&gt; None:
+    for p, m in zip(self.params, self.masters, strict=True):
+        p.copy_(m)</pre>
+        <div class="cols-2">
+          <div class="card"><p class="small" style="margin:0;"><b>Step 0 is the stock model:</b> a test asserts the prepared model's predictions equal the untouched checkpoint's.</p></div>
+          <div class="card"><p class="small" style="margin:0;"><b>Nothing to convert:</b> the fine-tuned result is a plain bf16 TabFM the stock <code class="inline">TabFMClassifier</code> uses directly.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 13: LIMITS -->
+    <section class="slide">
+      <div class="kicker">Honest limits</div>
+      <h2>Read these effects as a floor, not a ceiling</h2>
+      <div class="body" style="justify-content:center;">
+        <div class="lane">
+          <div class="lane-label optional">Scale</div>
+          <div class="lane-track"><span class="small" style="flex:1;">One seed and split per task, 1,500 training rows, 17% of the model, at most 150 steps. The paper trains the whole model on an 80 GB GPU on datasets averaging ~15k rows.</span></div>
+        </div>
+        <div class="lane">
+          <div class="lane-label optional">Task choice</div>
+          <div class="lane-track"><span class="small" style="flex:1;">The checkerboard was picked because zero-shot TabFM is weak on it. On the realistic table, fine-tuning found nothing.</span></div>
+        </div>
+        <div class="lane">
+          <div class="lane-label optional">Decisions</div>
+          <div class="lane-track"><span class="small" style="flex:1;">Probabilities and ranking improved; accuracy at the 0.5 threshold did not, within noise.</span></div>
+        </div>
+        <div class="lane">
+          <div class="lane-label critical">Licence</div>
+          <div class="lane-track"><span class="small" style="flex:1;">TabFM weights are non-commercial, so fine-tuned weights are never committed. Code is MIT. <span class="tag tag-critical">non-commercial weights</span></span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 14: CLOSING -->
+    <section class="slide">
+      <div class="kicker">Closing</div>
+      <h2>Takeaways and try it</h2>
+      <div class="body">
+        <div class="cols-2">
+          <div class="col">
+            <h3>What we found</h3>
+            <ul class="list-check small">
+              <li>Check the headroom before fine-tuning: a known ceiling makes it measurable</li>
+              <li>Fine-tuning helps where in-context learning struggles, a little on a laptop</li>
+              <li>Assert that step 0 is the model you started with: precision is part of the model</li>
+            </ul>
+          </div>
+          <div class="col">
+            <h3>Start here</h3>
+            <ul class="small" style="padding-left:18px;">
+              <li><code class="inline">README.md</code>: results, method and caveats</li>
+              <li><code class="inline">outputs/*/results.json</code>: every number on these slides</li>
+              <li><code class="inline">src/ltm_ft/finetune.py</code>: the training loop</li>
+            </ul>
+          </div>
+        </div>
+        <pre class="code small">uv run ltm-ft run --task checkerboard --name checkerboard
+uv run ltm-ft precision --task checkerboard</pre>
+        <div class="card tint-accent" style="text-align:center;">
+          <h3 style="margin:0;">github.com/glukicov/ltm_ft · Questions?</h3>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDES END -->
+  </div>
+</div>
+
+<div class="hud">
+  <button class="nav-btn" id="prevBtn" aria-label="Previous slide">◂</button>
+  <div class="counter"><span id="counterCur">1</span> / <span id="counterTotal">1</span></div>
+  <button class="nav-btn" id="nextBtn" aria-label="Next slide">▸</button>
+</div>
+
+<script>
+(function(){
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var total = slides.length;
+  var deck = document.getElementById('deck');
+  var progressBar = document.getElementById('progressBar');
+  var counterCur = document.getElementById('counterCur');
+  var counterTotal = document.getElementById('counterTotal');
+  counterTotal.textContent = total;
+
+  var current = 0;
+  var overview = false;
+
+  function setOverview(on){
+    overview = on;
+    deck.classList.toggle('overview', on);
+    if (on){ history.replaceState(null, '', '#overview'); }
+    else { render(); }
+  }
+
+  // click: in overview, jump to the clicked slide; otherwise advance
+  // (except on links/buttons)
+  deck.addEventListener('click', function(e){
+    if (overview){
+      var s = e.target.closest('.slide');
+      if (s){ setOverview(false); go(slides.indexOf(s)); }
+      return;
+    }
+    if (e.target.closest('a, button')) return;
+    go(current + 1);
+  });
+
+  function clamp(i){ return Math.max(0, Math.min(total - 1, i)); }
+
+  function render(){
+    slides.forEach(function(s, i){ s.classList.toggle('active', i === current); });
+    counterCur.textContent = current + 1;
+    progressBar.style.width = (((current + 1) / total) * 100) + '%';
+    history.replaceState(null, '', '#' + (current + 1));
+  }
+
+  function go(i){
+    current = clamp(i);
+    render();
+  }
+
+  document.getElementById('prevBtn').addEventListener('click', function(){ go(current - 1); });
+  document.getElementById('nextBtn').addEventListener('click', function(){ go(current + 1); });
+
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape'){ setOverview(!overview); return; }
+    if (overview) return;
+    if (['ArrowRight','ArrowDown','PageDown',' '].indexOf(e.key) > -1){ go(current + 1); e.preventDefault(); }
+    else if (['ArrowLeft','ArrowUp','PageUp'].indexOf(e.key) > -1){ go(current - 1); e.preventDefault(); }
+    else if (e.key === 'Home'){ go(0); }
+    else if (e.key === 'End'){ go(total - 1); }
+    else if (e.key === 'n' || e.key === 'N'){ deck.classList.toggle('show-notes'); }
+  });
+
+  function initFromHash(){
+    if ((location.hash || '') === '#overview'){ setOverview(true); return; }
+    var h = parseInt((location.hash || '').replace('#',''), 10);
+    current = isNaN(h) ? 0 : clamp(h - 1);
+    render();
+  }
+  window.addEventListener('hashchange', initFromHash);
+
+  function scaleDeck(){
+    var sw = window.innerWidth / 1280;
+    var sh = window.innerHeight / 720;
+    var scale = Math.min(sw, sh, 1.3);
+    deck.style.transform = 'scale(' + scale + ')';
+  }
+  window.addEventListener('resize', scaleDeck);
+
+  initFromHash();
+  scaleDeck();
+})();
+</script>
+
+</body>
+</html>

@@ -13,7 +13,7 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-MPS-EE4C2C)](https://pytorch.org)
 [![Paper](https://img.shields.io/badge/arXiv-2506.08982-b31b1b)](https://arxiv.org/abs/2506.08982)
 
-**[Results](#results) · [What we learned](#what-we-learned) · [How it works](#how-it-works) · [Quickstart](#quickstart) · [Layout](#layout) · [Licence](#licence)**
+**[Results](#results) · [What we learned](#what-we-learned) · [How it works](#how-it-works) · [Quickstart](#quickstart) · [Layout](#layout) · [Licence](#licence) · [Slides](docs/slides)**
 
 </div>
 
@@ -28,6 +28,17 @@ follows Rubachev et al., [*On Finetuning Tabular Foundation Models*](https://arx
 (2025), and Prior Labs' TabPFN fine-tuning examples
 ([classifier](https://github.com/PriorLabs/TabPFN/blob/main/examples/finetune_classifier.py),
 [regressor](https://github.com/PriorLabs/TabPFN/blob/main/examples/finetune_regressor.py)).
+
+**TL;DR**
+
+- ♟️ **Where zero-shot TabFM is weak** (a checkerboard, 69.1% vs a 94.9% ceiling), fine-tuning helped:
+  test log loss −0.021 and ROC AUC +0.008, both outside their 95% bootstrap intervals. Real, and small.
+- 🏃 **Where it is already strong** (a messy, realistic table), every fine-tuning step made validation
+  worse; early stopping kept the original model.
+- 🪤 **Precision is part of the model:** the same checkpoint computed in float32 loses ~11 ROC AUC
+  points, so we fine-tune a bf16 model with float32 master weights.
+
+> Reading not your game? Slides instead: [15 slides, HTML + PDF](docs/slides) 🖥️
 
 ## Results
 
@@ -171,6 +182,7 @@ src/ltm_ft/
 tests/           tiny random TabFM on CPU: logits parity with the stock classifier, freezing, master weights
 outputs/         committed results: results.json, summary.md, test_predictions.csv per run
 docs/figures/    README figures
+docs/slides/     the slide deck (HTML + PDF), citations checkable with SlideOps
 ```
 
 ## Licence
