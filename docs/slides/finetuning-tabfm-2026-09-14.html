@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!-- Build provenance: write it with `scripts/cite.py --stamp <deck> --repo .` so check.py
      can report which slides have gone stale. See references/freshness.md. -->
-<meta name="slideops-build" content="commit=63f52a2 date=2026-09-14 repo=ltm_ft">
-<title>Fine-tuning TabFM on a laptop</title>
+<meta name="slideops-build" content="commit=c807512 date=2026-09-14 repo=ltm_ft">
+<title>Fine-tuning TabFM: laptop vs GPU</title>
 <style>
   /* ── THEME ─────────────────────────────────────────────────────────────────
      The :root block below is the ENTIRE theme: every color in the deck derives
@@ -174,32 +174,32 @@
     <section class="slide title-slide">
       <div class="logo-row">
         <span class="tag tag-new">ltm_ft</span>
-        <span class="tag tag-existing">TabFM v1.0.0 · Apple M4</span>
+        <span class="tag tag-existing">TabFM v1.0.0 · Apple M4 · NVIDIA L4 on GKE</span>
       </div>
-      <h1>Fine-tuning a tabular foundation model<br><span class="grad">on a laptop</span></h1>
-      <p class="subtitle">Reading not your game? Slides instead. Zero-shot vs fine-tuned TabFM on synthetic tables where the best achievable score is known.</p>
+      <h1>Fine-tuning a tabular foundation model<br><span class="grad">laptop vs GPU</span></h1>
+      <p class="subtitle">Reading not your game? Slides instead. Zero-shot vs fine-tuned TabFM on synthetic tables where the best achievable score is known, on a laptop and as a Kubernetes Job.</p>
       <p class="small muted" style="margin-top:26px;">Gleb Lukicov · github.com/glukicov/ltm_ft</p>
-      <aside class="notes">Follow-up to glukicov/ltm, where TabFM matched CatBoost with no training. Here we train it.</aside>
+      <aside class="notes">Follow-up to glukicov/ltm (TabFM matched CatBoost with no training) and glukicov/ltm_serve (serving TabFM on GKE). Here we train it, twice.</aside>
     </section>
 
     <!-- 1: RESULTS AT A GLANCE -->
     <section class="slide">
       <div class="kicker">Results at a glance</div>
-      <h2>Fine-tuning helped where TabFM was weak, and did nothing where it was strong</h2>
-      <div class="img-wrap"><img src="../figures/before_after.png" alt="Test log loss for zero-shot and fine-tuned TabFM on the runners and checkerboard tasks, with the ceiling marked"></div>
-      <p class="caption" data-src="outputs/checkerboard/results.json" data-sha256="e628887b11ec">Same 3,000 test rows per task. Checkerboard log loss 0.614 → 0.593 (ceiling 0.202); runners unchanged at 0.527 (ceiling 0.473).</p>
+      <h2>Only training the encoders moved TabFM far</h2>
+      <div class="img-wrap"><img src="../figures/before_after.png" alt="Test accuracy for zero-shot and fine-tuned TabFM on runners and checkerboard, per variant, on the Apple M4 and the NVIDIA L4, with the ceiling marked"></div>
+      <p class="caption" data-src="outputs/l4/checkerboard_encoders/results.json" data-sha256="59eab70bdabd">Same 3,000 test rows per task. Encoders on the L4: checkerboard 66.5% → 93.8% (ceiling 94.9%); other rows moved under a point.</p>
     </section>
 
     <!-- 2: THE QUESTION -->
     <section class="slide">
       <div class="kicker">The question</div>
-      <h2>TabFM already learns in context, so what does training add?</h2>
+      <h2>TabFM already learns in context, so what do training and a GPU add?</h2>
       <div class="body">
         <div class="card">
-          <p style="font-size:19px;margin:0;">TabFM predicts a row from labelled context rows in one forward pass, with no training step. Fine-tuning keeps that interface and trains it on your table.</p>
+          <p style="font-size:19px;margin:0;">TabFM predicts a row from labelled context rows in one forward pass, with no training step. Fine-tuning keeps that interface and trains it on your table. We ran the same code on an Apple M4 laptop and on an NVIDIA L4 in GKE.</p>
         </div>
         <div class="cols-2">
-          <div class="card"><h3>Last time: glukicov/ltm</h3><p class="small" style="margin:0;">Zero-shot TabFM matched a trained CatBoost model on penguins and on synthetic runners, without training, tuning or a model file.</p></div>
+          <div class="card"><h3>Before: glukicov/ltm and ltm_serve</h3><p class="small" style="margin:0;">Zero-shot TabFM matched a trained CatBoost model with no training; ltm_serve then served it on GKE with an L4 pool that scales from zero.</p></div>
           <div class="card"><h3>The paper: arXiv 2506.08982</h3><p class="small" style="margin:0;">Full fine-tuning makes TabPFNv2 state of the art on academic benchmarks; on small datasets the gains are often statistically insignificant.</p></div>
         </div>
       </div>
@@ -236,7 +236,7 @@
       <div class="body">
         <div class="tag tag-existing" style="align-self:flex-start;">src/ltm_ft/finetune.py</div>
         <pre class="code small" style="margin:0;"
-             data-src="src/ltm_ft/finetune.py:207-214" data-sha256="ffdfe09b9ff0">loss = episode_loss(model, episode)
+             data-src="src/ltm_ft/finetune.py:236-243" data-sha256="ffdfe09b9ff0">loss = episode_loss(model, episode)
 loss.backward()  # type: ignore[no-untyped-call]
 master.gradients_to_masters()
 torch.nn.utils.clip_grad_norm_(master.masters, config.grad_clip)
@@ -245,7 +245,7 @@ scheduler.step()
 optimizer.zero_grad(set_to_none=True)
 master.masters_to_params()</pre>
         <div class="cols-2">
-          <div class="card"><p class="small" style="margin:0;"><b>No custom forward:</b> frozen parameters do not require gradients, so autograd records nothing until the first trainable block.</p></div>
+          <div class="card"><p class="small" style="margin:0;"><b>No custom forward:</b> frozen parameters do not require gradients, so autograd records nothing until the first trainable module.</p></div>
           <div class="card"><p class="small" style="margin:0;"><b>Master weights:</b> gradients move to float32 copies, AdamW updates those, and the rounded values go back into the bf16 model.</p></div>
         </div>
       </div>
@@ -253,113 +253,42 @@ master.masters_to_params()</pre>
 
     <!-- 5: MEMORY -->
     <section class="slide">
-      <div class="kicker">The laptop problem</div>
-      <h2>1.64B parameters do not fit AdamW in 24 GB; 277M do</h2>
+      <div class="kicker">What to train</div>
+      <h2>1.64B parameters do not fit AdamW in 24 GB, so we train a slice</h2>
       <div class="body">
         <table>
-          <tr><th>What is trained</th><th>Trainable</th><th>Outcome on a 24 GB M4</th></tr>
-          <tr><td>Everything</td><td>1.64B</td><td>~26 GB for weights, gradients and two Adam moments: does not fit</td></tr>
-          <tr><td>Last 4 of 24 ICL blocks + head</td><td>277M</td><td>~10 GB peak, 15–30 s per step <span class="tag tag-new">used</span></td></tr>
-          <tr><td>… + row/column encoders</td><td>297M</td><td>Backward through all 24 blocks: 249 s per step, swapping</td></tr>
+          <tr><th>What is trained</th><th>Trainable</th><th>Apple M4, 24 GB unified</th><th>NVIDIA L4, 24 GB</th></tr>
+          <tr><td>Everything</td><td>1.64B</td><td colspan="2">~26 GB for weights, gradients and two Adam moments: does not fit either</td></tr>
+          <tr data-src="outputs/m4/checkerboard/results.json" data-sha256="b033487b0cc7"><td>Last 4 of 24 ICL blocks + head</td><td>277M</td><td>3.87 s/step, 11.0 GB</td><td>0.45 s/step, 8.8 GB</td></tr>
+          <tr data-src="outputs/m4/tune/checkerboard_encoders_timing.json" data-sha256="bf0e59f5a017"><td>… + row/column encoders</td><td>297M</td><td>36.7 s/step, 17.9 GB; swaps with other apps</td><td>0.74 s/step, 14.9 GB</td></tr>
         </table>
-        <p class="small muted" style="margin:0;">1.62B of the 1.64B parameters sit in the in-context-learning transformer. The paper found partial fine-tuning close to full fine-tuning.</p>
+        <p class="small muted" style="margin:0;">1.62B of the 1.64B parameters sit in the in-context-learning transformer. Training the encoders needs a backward pass through all 24 blocks. M4 memory is what the MPS driver held; L4 is CUDA peak allocation.</p>
       </div>
     </section>
 
-    <!-- 6: RUNNERS -->
-    <section class="slide">
-      <div class="kicker">Round 1 · realistic table</div>
-      <h2>On the runners table, every fine-tuning step made validation worse</h2>
-      <div class="body">
-        <table data-src="outputs/runners/results.json" data-sha256="df6cd016da2a">
-          <tr><th>3,000 test rows</th><th>Log loss</th><th>ROC AUC</th><th>Accuracy</th></tr>
-          <tr><td>TabFM zero-shot</td><td>0.5267</td><td>0.8240</td><td>74.8%</td></tr>
-          <tr><td>TabFM fine-tuned (early stopping kept step 0)</td><td>0.5267</td><td>0.8240</td><td>74.8%</td></tr>
-          <tr><td>Generator's true probabilities (ceiling)</td><td>0.4732</td><td>0.8537</td><td>77.8%</td></tr>
-        </table>
-        <div class="card tint-warn"><p class="small" style="margin:0;"><b>Validation log loss:</b> 0.4651 at step 0; 0.4712, 0.4684 and 0.4683 at steps 25, 50 and 75. Three evaluations without improvement stopped the run.</p></div>
-      </div>
-    </section>
-
-    <!-- 7: JUNK COLUMNS -->
-    <section class="slide">
-      <div class="kicker">Round 1 · realistic table</div>
-      <h2>TabFM ignored 100 appended columns of pure noise</h2>
-      <div class="body" style="justify-content:center;">
-        <div class="stat-row" data-src="outputs/tune/runners_zero_shot_noise100.json" data-sha256="93667e9e0b81">
-          <div class="card stat"><span class="num">0.4651 → 0.4672</span><span class="lbl">validation log loss</span></div>
-          <div class="card stat"><span class="num">76.4% → 75.8%</span><span class="lbl">validation accuracy</span></div>
-          <div class="card stat"><span class="num">0.8554 → 0.8556</span><span class="lbl">validation ROC AUC</span></div>
-        </div>
-        <div class="card"><p class="small" style="margin:0;">Zero-shot, 21 real columns vs the same rows with 100 extra noise columns (<code class="inline">--noise-columns 100</code>). Distractors were not a weakness to fine-tune away either.</p></div>
-      </div>
-    </section>
-
-    <!-- 8: CHECKERBOARD TASK -->
-    <section class="slide">
-      <div class="kicker">Round 2 · a table TabFM is bad at</div>
-      <h2>The checkerboard leaves zero-shot TabFM 26 points below the ceiling</h2>
-      <div class="body">
-        <div class="card">
-          <p style="font-size:19px;margin:0;">Ten uniform features. The label depends only on which square of a 6×6 board the first two fall in: P(yes) is sigmoid(+3) on white squares, sigmoid(−3) on black.</p>
-        </div>
-        <div class="cols-2">
-          <div class="card"><h3>Why it is hard</h3><p class="small" style="margin:0;">Neither feature is informative alone, and a row's nearest neighbours in ten dimensions are mostly on other squares.</p></div>
-          <div class="card" data-src="outputs/checkerboard/results.json" data-sha256="e628887b11ec"><h3>The gap</h3><p class="small" style="margin:0;">Test accuracy: zero-shot 69.1%, ceiling 94.9%. Log loss: 0.614 vs 0.202.</p></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- 9: VALIDATION CURVE -->
-    <section class="slide">
-      <div class="kicker">Round 2 · a table TabFM is bad at</div>
-      <h2>Validation improved for 75 steps, then plateaued</h2>
-      <div class="img-wrap"><img src="../figures/checkerboard_validation.png" alt="Checkerboard validation accuracy against fine-tuning step, with zero-shot and ceiling lines"></div>
-      <p class="caption" data-src="outputs/tune/checkerboard_b4_lr3e-4.json" data-sha256="0603396446c2">500 validation rows. Log loss 0.6077 at step 0, 0.5837 at step 75 (kept), 0.5866 at step 150.</p>
-    </section>
-
-    <!-- 10: TEST RESULT -->
-    <section class="slide">
-      <div class="kicker">Round 2 · a table TabFM is bad at</div>
-      <h2>On 3,000 test rows, log loss and ROC AUC improved significantly</h2>
-      <div class="body" data-src="outputs/checkerboard/results.json" data-sha256="e628887b11ec">
-        <table>
-          <tr><th>3,000 test rows</th><th>Log loss</th><th>ROC AUC</th><th>Accuracy</th></tr>
-          <tr><td>TabFM zero-shot</td><td>0.6140</td><td>0.7642</td><td>69.1%</td></tr>
-          <tr><td><b>TabFM fine-tuned</b> (step 75)</td><td><b>0.5934</b></td><td><b>0.7721</b></td><td>69.7%</td></tr>
-          <tr><td>Ceiling</td><td>0.2016</td><td>0.9490</td><td>94.9%</td></tr>
-        </table>
-        <table>
-          <tr><th>Fine-tuned minus zero-shot</th><th>Δ</th><th>95% paired-bootstrap interval</th></tr>
-          <tr><td>Log loss</td><td>−0.021</td><td>[−0.024, −0.018] <span class="tag tag-new">significant</span></td></tr>
-          <tr><td>ROC AUC</td><td>+0.008</td><td>[+0.002, +0.014] <span class="tag tag-new">significant</span></td></tr>
-          <tr><td>Accuracy</td><td>+0.6 pts</td><td>[−0.6, +1.8] <span class="tag tag-optional">within noise</span></td></tr>
-        </table>
-      </div>
-    </section>
-
-    <!-- 11: PRECISION TRAP -->
+    <!-- 6: PRECISION TRAP -->
     <section class="slide">
       <div class="kicker">The trap</div>
-      <h2>The same checkpoint computed in float32 loses 11 AUC points</h2>
+      <h2>Same checkpoint, same rows: 59.8%, 65.0% or 70.2%</h2>
       <div class="body">
-        <table data-src="outputs/precision/checkerboard.json" data-sha256="414e5f25b3c1">
+        <table>
           <tr><th>Checkerboard, zero-shot, 500 validation rows</th><th>Log loss</th><th>ROC AUC</th><th>Accuracy</th></tr>
-          <tr><td>bfloat16 (library default)</td><td>0.6077</td><td>0.7749</td><td>70.2%</td></tr>
-          <tr><td>float32 (<code class="inline">dtype=None</code>)</td><td>0.6495</td><td>0.6658</td><td>59.8%</td></tr>
+          <tr data-src="outputs/m4/precision/checkerboard.json" data-sha256="58c6f03a3f01"><td>float32 (<code class="inline">dtype=None</code>), M4 and L4 identical</td><td>0.6495</td><td>0.6658</td><td>59.8%</td></tr>
+          <tr data-src="outputs/l4/precision/checkerboard.json" data-sha256="e1a5bedb53f5"><td>bfloat16 on the L4 (CUDA)</td><td>0.6323</td><td>0.7244</td><td>65.0%</td></tr>
+          <tr><td>bfloat16 on the M4 (MPS)</td><td>0.6077</td><td>0.7749</td><td>70.2%</td></tr>
         </table>
-        <div class="card tint-warn"><p class="small" style="margin:0;"><b>Why it matters:</b> "upcast the weights you train to float32" is the textbook move. Here it changes the model before the first gradient step, and a run could "improve" from 60% back to 70% without learning anything.</p></div>
+        <div class="card tint-warn"><p class="small" style="margin:0;"><b>Why it matters:</b> "upcast the weights you train to float32" is the textbook move, and here it changes the model before the first gradient step. bfloat16 also differs by device, so zero-shot and fine-tuned must be compared on the same machine.</p></div>
       </div>
     </section>
 
-    <!-- 12: MASTER WEIGHTS FIX -->
+    <!-- 7: MASTER WEIGHTS FIX -->
     <section class="slide">
       <div class="kicker">The fix</div>
       <h2>Keep the model in bf16 and the optimiser's copies in float32</h2>
       <div class="body">
         <div class="tag tag-existing" style="align-self:flex-start;">src/ltm_ft/finetune.py · class Float32Master</div>
         <pre class="code small" style="margin:0;"
-             data-src="src/ltm_ft/finetune.py:136-148" data-sha256="44d3f8879d63">def __init__(self, params: list[nn.Parameter]) -&gt; None:
+             data-src="src/ltm_ft/finetune.py:137-149" data-sha256="44d3f8879d63">def __init__(self, params: list[nn.Parameter]) -&gt; None:
     self.params = params
     self.masters = [p.detach().float().clone() for p in params]
 
@@ -379,31 +308,181 @@ def masters_to_params(self) -&gt; None:
       </div>
     </section>
 
-    <!-- 13: LIMITS -->
+    <!-- 8: RUNNERS -->
     <section class="slide">
-      <div class="kicker">Honest limits</div>
-      <h2>Read these effects as a floor, not a ceiling</h2>
+      <div class="kicker">Realistic table</div>
+      <h2>On the runners table, nothing we trained beat zero-shot</h2>
+      <div class="body">
+        <table>
+          <tr><th>3,000 test rows (ceiling 77.8%)</th><th>Zero-shot</th><th>Fine-tuned</th><th>Step kept</th></tr>
+          <tr data-src="outputs/m4/runners/results.json" data-sha256="2cac5d18a32d"><td>M4, last 4 blocks</td><td>74.8%</td><td>74.8%</td><td>0</td></tr>
+          <tr data-src="outputs/l4/runners/results.json" data-sha256="4cd05d939802"><td>L4, last 4 blocks</td><td>74.8%</td><td>74.8%</td><td>0</td></tr>
+          <tr data-src="outputs/l4/runners_encoders/results.json" data-sha256="dec8669c793d"><td>L4, + encoders</td><td>74.8%</td><td>74.8%</td><td>0</td></tr>
+        </table>
+        <div class="card tint-warn"><p class="small" style="margin:0;"><b>Every validation check after a gradient step was worse than zero-shot</b>, so early stopping kept the original weights each time. The messy 21-column table is the one from glukicov/ltm.</p></div>
+      </div>
+    </section>
+
+    <!-- 9: JUNK COLUMNS -->
+    <section class="slide">
+      <div class="kicker">Realistic table</div>
+      <h2>TabFM ignored 100 appended columns of pure noise</h2>
       <div class="body" style="justify-content:center;">
-        <div class="lane">
-          <div class="lane-label optional">Scale</div>
-          <div class="lane-track"><span class="small" style="flex:1;">One seed and split per task, 1,500 training rows, 17% of the model, at most 150 steps. The paper trains the whole model on an 80 GB GPU on datasets averaging ~15k rows.</span></div>
+        <div class="stat-row" data-src="outputs/m4/tune/runners_zero_shot_noise100.json" data-sha256="93667e9e0b81">
+          <div class="card stat"><span class="num">0.4651 → 0.4672</span><span class="lbl">validation log loss</span></div>
+          <div class="card stat"><span class="num">76.4% → 75.8%</span><span class="lbl">validation accuracy</span></div>
+          <div class="card stat"><span class="num">0.8554 → 0.8556</span><span class="lbl">validation ROC AUC</span></div>
         </div>
-        <div class="lane">
-          <div class="lane-label optional">Task choice</div>
-          <div class="lane-track"><span class="small" style="flex:1;">The checkerboard was picked because zero-shot TabFM is weak on it. On the realistic table, fine-tuning found nothing.</span></div>
+        <div class="card"><p class="small" style="margin:0;">Zero-shot on the M4, 21 real columns vs the same rows with 100 extra noise columns (<code class="inline">--noise-columns 100</code>). Distractors were not a weakness to fine-tune away either.</p></div>
+      </div>
+    </section>
+
+    <!-- 10: CHECKERBOARD TASK -->
+    <section class="slide">
+      <div class="kicker">A table TabFM is bad at</div>
+      <h2>The checkerboard leaves zero-shot TabFM far below the ceiling</h2>
+      <div class="body">
+        <div class="card">
+          <p style="font-size:19px;margin:0;">Ten uniform features. The label depends only on which square of a 6×6 board the first two fall in: P(yes) is sigmoid(+3) on white squares, sigmoid(−3) on black.</p>
         </div>
-        <div class="lane">
-          <div class="lane-label optional">Decisions</div>
-          <div class="lane-track"><span class="small" style="flex:1;">Probabilities and ranking improved; accuracy at the 0.5 threshold did not, within noise.</span></div>
-        </div>
-        <div class="lane">
-          <div class="lane-label critical">Licence</div>
-          <div class="lane-track"><span class="small" style="flex:1;">TabFM weights are non-commercial, so fine-tuned weights are never committed. Code is MIT. <span class="tag tag-critical">non-commercial weights</span></span></div>
+        <div class="cols-2">
+          <div class="card"><h3>Why it is hard</h3><p class="small" style="margin:0;">Neither feature is informative alone, and a row's nearest neighbours in ten dimensions are mostly on other squares.</p></div>
+          <div class="card" data-src="outputs/m4/checkerboard/results.json" data-sha256="b033487b0cc7"><h3>The gap, data seed 7</h3><p class="small" style="margin:0;">Test accuracy: zero-shot 69.1% on the M4, 66.5% on the L4; ceiling 94.9%.</p></div>
         </div>
       </div>
     </section>
 
-    <!-- 14: CLOSING -->
+    <!-- 11: SAME RECIPE TWO MACHINES -->
+    <section class="slide">
+      <div class="kicker">Same recipe, two machines</div>
+      <h2>The last 4 blocks give the same small, significant gain on both</h2>
+      <div class="body">
+        <table>
+          <tr><th>Checkerboard, seed 7, 3,000 test rows</th><th>Zero-shot</th><th>Fine-tuned</th><th>Δ log loss [95% CI]</th><th>Δ accuracy [95% CI]</th></tr>
+          <tr data-src="outputs/m4/checkerboard/results.json" data-sha256="b033487b0cc7"><td>Apple M4 (MPS)</td><td>69.1%</td><td>69.7%</td><td>−0.021 [−0.024, −0.018] <span class="tag tag-new">significant</span></td><td>+0.6 [−0.6, +1.8]</td></tr>
+          <tr data-src="outputs/l4/checkerboard/results.json" data-sha256="672a96cc8ee5"><td>NVIDIA L4 (CUDA)</td><td>66.5%</td><td>66.9%</td><td>−0.017 [−0.020, −0.014] <span class="tag tag-new">significant</span></td><td>+0.5 [−0.9, +1.8]</td></tr>
+        </table>
+        <p class="small muted" style="margin:0;">Better probabilities, the same decisions. The zero-shot starting points differ by device because bfloat16 kernels differ (slide 7).</p>
+      </div>
+    </section>
+
+    <!-- 12: KUBERNETES -->
+    <section class="slide">
+      <div class="kicker">Moving the job</div>
+      <h2>One image, an L4 pool that scales from zero, one Job per batch</h2>
+      <div class="body">
+        <div class="flow">
+          <div class="flow-box"><div class="t">up.sh</div><div class="d">Cloud Build image from uv.lock + CUDA torch; cluster</div></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-box accent"><div class="t">finetune.sh</div><div class="d">ltm-ft commands become one Job on the L4</div></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-box"><div class="t">collect.sh</div><div class="d">copy outputs/, write the timeline, delete the Job</div></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-box"><div class="t">down.sh</div><div class="d">delete cluster, images, uploads</div></div>
+        </div>
+        <div class="cols-2">
+          <div class="col">
+            <div class="tag tag-existing" style="align-self:flex-start;">k8s/gke/job-finetune.yaml</div>
+            <pre class="code small" style="margin:0;"
+                 data-src="k8s/gke/job-finetune.yaml:18-23" data-sha256="fae951152811">tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+nodeSelector:
+  cloud.google.com/gke-accelerator: nvidia-l4</pre>
+          </div>
+          <div class="col">
+            <div class="card"><p class="small" style="margin:0;"><b>No weights in the image:</b> the pod downloads TabFM from Hugging Face inside GCP; the weights are non-commercial.</p></div>
+            <div class="card"><p class="small" style="margin:0;"><b>Quota decides the GPU:</b> the project allows one GPU and no A100s, so 1× L4 (24 GB) on a g2-standard-8.</p></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 13: EFFICIENCY -->
+    <section class="slide">
+      <div class="kicker">Laptop vs GPU</div>
+      <h2>The L4 fine-tunes 9× faster, and ~50× for the encoders</h2>
+      <div class="img-wrap"><img src="../figures/efficiency.png" alt="Speed-up of the NVIDIA L4 over the Apple M4 for each stage of the same checkerboard run"></div>
+      <p class="caption" data-src="outputs/l4/checkerboard/results.json" data-sha256="672a96cc8ee5">Same checkerboard run: 150 steps + validation 12.3 min → 82.5 s; whole run 15.5 min → 2.6 min. On the laptop the encoder variant swapped and was stopped.</p>
+    </section>
+
+    <!-- 14: COLD START AND COST -->
+    <section class="slide">
+      <div class="kicker">Laptop vs GPU</div>
+      <h2>Kubernetes costs minutes once, then seconds; a run costs ~4 cents</h2>
+      <div class="body">
+        <div class="cols-2">
+          <table data-src="outputs/l4/timeline-ltm-ft-20260914-090533.json" data-sha256="295e28a249b1">
+            <tr><th>First Job, from creation</th><th>Seconds</th></tr>
+            <tr><td>GPU node exists</td><td>53</td></tr>
+            <tr><td>Pod scheduled</td><td>104</td></tr>
+            <tr><td>Image pulled (2 min 3 s)</td><td>228</td></tr>
+            <tr><td>Container started</td><td>228</td></tr>
+            <tr><td>Later Jobs on the warm node</td><td>~1</td></tr>
+          </table>
+          <table data-src="outputs/l4/session.json" data-sha256="9749e761f4ce">
+            <tr><th>List price, us-central1</th><th>USD</th></tr>
+            <tr><td>g2-standard-8 (1× L4), per hour</td><td>0.854</td></tr>
+            <tr><td>… Spot, per hour</td><td>0.512</td></tr>
+            <tr><td>One checkerboard run (171 s)</td><td>~0.04</td></tr>
+            <tr><td>Session: L4 node 1.28 h + system node</td><td>1.09 + 0.18</td></tr>
+            <tr><td>20 runs, 1.05 GPU-hours busy</td><td>0.89</td></tr>
+          </table>
+        </div>
+        <p class="small muted" style="margin:0;">One-off setup: image build 8 min 4 s, cluster 4 min 5 s. Excludes the GKE management fee and Cloud Build minutes.</p>
+      </div>
+    </section>
+
+    <!-- 15: ENCODERS ON THE L4 -->
+    <section class="slide">
+      <div class="kicker">The variant the laptop could not run</div>
+      <h2>Training the encoders took the checkerboard from 66.5% to 93.8%</h2>
+      <div class="img-wrap"><img src="../figures/checkerboard_validation.png" alt="Validation accuracy against fine-tuning step on the L4 for the last-4-blocks and encoder variants"></div>
+      <p class="caption" data-src="outputs/l4/checkerboard_encoders/results.json" data-sha256="59eab70bdabd">Test, data seed 7: zero-shot 66.5%, last 4 blocks 66.9%, + encoders 93.8% (log loss 0.623 → 0.224; ceiling 94.9%, 0.202).</p>
+    </section>
+
+    <!-- 16: SEEDS -->
+    <section class="slide">
+      <div class="kicker">Five seeds later</div>
+      <h2>The encoder variant reaches the ceiling on 2 of 5 seeds</h2>
+      <div class="img-wrap"><img src="../figures/seeds.png" alt="Test accuracy per data seed for zero-shot, last 4 blocks and encoder fine-tuning on the L4, with the ceiling"></div>
+      <p class="caption" data-src="outputs/l4/seeds/encoders_data37/results.json" data-sha256="1698de3f6873">Seeds 7 and 37 reach 93.8% and 94.1%. Seeds 17, 27 and 47 stay at zero-shot; zero-shot itself ranges from 49.3% to 88.5%. 20 minutes on the L4.</p>
+    </section>
+
+    <!-- 17: COLLAPSE -->
+    <section class="slide">
+      <div class="kicker">Five seeds later</div>
+      <h2>When it fails, training collapses to predicting 0.5</h2>
+      <div class="img-wrap"><img src="../figures/collapse.png" alt="Validation log loss over 300 steps without early stopping for data seeds 17, 27 and 47"></div>
+      <p class="caption" data-src="outputs/l4/tune/encoders_data17_300steps.json" data-sha256="2e92b8bc0942">Seed 17 collapses for 150 steps, then recovers to 94.2% validation accuracy by step 300. Seeds 27 and 47 never leave ln 2 at lr 1e-4, 3e-4 or 1e-3.</p>
+    </section>
+
+    <!-- 18: LIMITS -->
+    <section class="slide">
+      <div class="kicker">Honest limits</div>
+      <h2>Read these effects as a floor, and the big one as fragile</h2>
+      <div class="body" style="justify-content:center;">
+        <div class="lane">
+          <div class="lane-label optional">Scale</div>
+          <div class="lane-track"><span class="small" style="flex:1;">1,500 training rows, at most 150 steps (300 for diagnostics), 17–18% of the model. The paper trains the whole model on an 80 GB GPU on larger datasets.</span></div>
+        </div>
+        <div class="lane">
+          <div class="lane-label optional">Seeds</div>
+          <div class="lane-track"><span class="small" style="flex:1;">Five seeds on one synthetic task, chosen because zero-shot TabFM is weak on it; one seed for the others.</span></div>
+        </div>
+        <div class="lane">
+          <div class="lane-label optional">Hardware</div>
+          <div class="lane-track"><span class="small" style="flex:1;">One L4 is the largest GPU the project's quota allows. Laptop timings vary with other load: the same test pass took 52 s and 126 s.</span></div>
+        </div>
+        <div class="lane">
+          <div class="lane-label critical">Licence</div>
+          <div class="lane-track"><span class="small" style="flex:1;">TabFM weights are non-commercial: none are committed or baked into images. Code is MIT. <span class="tag tag-critical">non-commercial weights</span></span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 19: CLOSING -->
     <section class="slide">
       <div class="kicker">Closing</div>
       <h2>Takeaways and try it</h2>
@@ -412,22 +491,25 @@ def masters_to_params(self) -&gt; None:
           <div class="col">
             <h3>What we found</h3>
             <ul class="list-check small">
-              <li>Check the headroom before fine-tuning: a known ceiling makes it measurable</li>
-              <li>Fine-tuning helps where in-context learning struggles, a little on a laptop</li>
-              <li>Assert that step 0 is the model you started with: precision is part of the model</li>
+              <li>A dedicated GPU pays off the moment you iterate: speed made the seed check affordable</li>
+              <li>A laptop runs out of memory before it runs out of speed</li>
+              <li>Run more than one seed before you believe a fine-tuning win</li>
+              <li>Precision and device are part of the model; check the headroom first</li>
             </ul>
           </div>
           <div class="col">
             <h3>Start here</h3>
             <ul class="small" style="padding-left:18px;">
-              <li><code class="inline">README.md</code>: results, method and caveats</li>
-              <li><code class="inline">outputs/*/results.json</code>: every number on these slides</li>
-              <li><code class="inline">src/ltm_ft/finetune.py</code>: the training loop</li>
+              <li><code class="inline">README.md</code>: results, cost and caveats</li>
+              <li><code class="inline">outputs/m4</code>, <code class="inline">outputs/l4</code>: every number on these slides</li>
+              <li><code class="inline">k8s/gke</code>: the cluster and Job scripts</li>
             </ul>
           </div>
         </div>
-        <pre class="code small">uv run ltm-ft run --task checkerboard --name checkerboard
-uv run ltm-ft precision --task checkerboard</pre>
+        <pre class="code small">uv run ltm-ft run --task checkerboard --train-encoders --name m4/enc
+k8s/gke/up.sh
+k8s/gke/finetune.sh "run --task checkerboard --train-encoders --name l4/enc"
+k8s/gke/down.sh</pre>
         <div class="card tint-accent" style="text-align:center;">
           <h3 style="margin:0;">github.com/glukicov/ltm_ft · Questions?</h3>
         </div>
