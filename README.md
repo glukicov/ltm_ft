@@ -94,8 +94,9 @@ Where it doesn't, the reason is visible on validation (training up to 300 steps,
 ![Collapse to predicting 0.5](docs/figures/collapse.png)
 
 - **Seed 17** starts well (85.8% validation), collapses to predicting 0.5 (log loss ln 2) for 150
-  steps, then recovers to **94.2%** by step 300 (validation ceiling 95.0%). Patience cut it off at
-  step 150, one evaluation before the recovery.
+  steps, then recovers to **94.2%** by step 300 (validation ceiling 95.0%). In the 150-step run,
+  patience stopped it at step 75 just as it was recovering (validation log loss 0.366 against 0.365 at
+  step 0), so step 0 was kept.
 - **Seeds 27 and 47** start at 0.5 and never leave it: not at lr 1e-4, 3e-4 or 1e-3.
 
 ### 🏃 Runners: nothing to win ([`outputs/m4/runners`](outputs/m4/runners/summary.md), [`outputs/l4`](outputs/l4))
