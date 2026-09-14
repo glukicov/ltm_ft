@@ -1,0 +1,131 @@
+{
+  "data": {
+    "task": "checkerboard",
+    "n_train": 1500,
+    "n_val": 500,
+    "n_test": 3000,
+    "data_seed": 7,
+    "noise_columns": 0,
+    "val_ceiling": {
+      "log_loss": 0.13258735157374202,
+      "roc_auc": 0.9719959674193085,
+      "accuracy": 0.972
+    }
+  },
+  "config": {
+    "n_trainable_blocks": 4,
+    "train_encoders": false,
+    "learning_rate": 0.0003,
+    "weight_decay": 0.01,
+    "max_steps": 150,
+    "warmup_steps": 5,
+    "context_size": 512,
+    "query_size": 256,
+    "grad_clip": 1.0,
+    "eval_every": 25,
+    "patience": 3,
+    "n_estimators_val": 2,
+    "seed": 0
+  },
+  "n_estimators_test": 4,
+  "test": {
+    "TabFM zero-shot": {
+      "log_loss": 0.6139990531804473,
+      "roc_auc": 0.764188339639262,
+      "accuracy": 0.6913333333333334
+    },
+    "TabFM fine-tuned (last 4 ICL blocks, step 75)": {
+      "log_loss": 0.593441333156071,
+      "roc_auc": 0.7720850098155598,
+      "accuracy": 0.697
+    },
+    "Generator's true probabilities (ceiling)": {
+      "log_loss": 0.20158735157374208,
+      "roc_auc": 0.9490024217788541,
+      "accuracy": 0.949
+    }
+  },
+  "delta_finetuned_minus_zero_shot": {
+    "log_loss": {
+      "delta": -0.02055772002437639,
+      "ci_low": -0.02360787095892035,
+      "ci_high": -0.017525963855967653
+    },
+    "accuracy": {
+      "delta": 0.005666666666666598,
+      "ci_low": -0.005666666666666667,
+      "ci_high": 0.018
+    },
+    "roc_auc": {
+      "delta": 0.007896670176297804,
+      "ci_low": 0.0024496473907976188,
+      "ci_high": 0.013727882005697882
+    }
+  },
+  "best_step": 75,
+  "stopped_early": true,
+  "history": [
+    {
+      "step": 0,
+      "train_loss": NaN,
+      "val_log_loss": 0.607712849021264,
+      "val_roc_auc": 0.7748875838120689,
+      "val_accuracy": 0.702
+    },
+    {
+      "step": 25,
+      "train_loss": 0.6655918776988983,
+      "val_log_loss": 0.6012789479141559,
+      "val_roc_auc": 0.7806724168280232,
+      "val_accuracy": 0.716
+    },
+    {
+      "step": 50,
+      "train_loss": 0.6949727487564087,
+      "val_log_loss": 0.5918601904948944,
+      "val_roc_auc": 0.7849930389976156,
+      "val_accuracy": 0.722
+    },
+    {
+      "step": 75,
+      "train_loss": 0.6667652666568756,
+      "val_log_loss": 0.5837491849875728,
+      "val_roc_auc": 0.785505112736234,
+      "val_accuracy": 0.722
+    },
+    {
+      "step": 100,
+      "train_loss": 0.6856770157814026,
+      "val_log_loss": 0.5839910065654177,
+      "val_roc_auc": 0.7857931542142069,
+      "val_accuracy": 0.716
+    },
+    {
+      "step": 125,
+      "train_loss": 0.6749738478660583,
+      "val_log_loss": 0.5863955925112608,
+      "val_roc_auc": 0.7876094157558688,
+      "val_accuracy": 0.724
+    },
+    {
+      "step": 150,
+      "train_loss": 0.6935982537269593,
+      "val_log_loss": 0.5865786074994566,
+      "val_roc_auc": 0.7870173304955914,
+      "val_accuracy": 0.718
+    }
+  ],
+  "timings_s": {
+    "test_zero-shot_s": 140.79844416599371,
+    "finetune_s": 1250.281217958007,
+    "test_fine-tuned_s": 157.88493245799327,
+    "total_s": 1567.9974713750125
+  },
+  "environment": {
+    "device": "mps",
+    "torch": "2.14.0",
+    "tabfm": "1.0.1",
+    "python": "3.14.0",
+    "machine": "arm64"
+  }
+}

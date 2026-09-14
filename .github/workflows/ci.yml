@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Nothing here writes to the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint and format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      # No python-version here: uv reads .python-version. Only the dev group (ruff, mypy, pytest) is installed.
+      - name: Install the development toolchain
+        run: uv sync --locked --only-dev
+
+      - name: Lint
+        run: uv run --no-sync ruff check --output-format github .
+
+      - name: Format
+        run: uv run --no-sync ruff format --check .
+
+  test:
+    name: Types (mypy --strict) and tests
+    runs-on: ubuntu-latest
+    env:
+      # `uv run` would otherwise re-sync the environment and swap the CPU torch below for the locked CUDA build.
+      UV_NO_SYNC: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      # CPU-only PyTorch. uv.lock pins torch from PyPI, whose Linux wheels bring gigabytes of CUDA libraries that
+      # neither mypy nor the tests use. Install everything else exactly as locked (--locked still fails on a stale
+      # uv.lock), skip torch and its CUDA wheels, then install the CPU build of the locked torch version.
+      - name: Install the project with CPU-only PyTorch
+        run: |
+          locked=$(uv export --locked --no-emit-project --no-hashes)
+          skip=()
+          while read -r package; do
+            skip+=(--no-install-package "$package")
+          done < <(grep -oE '^(torch|triton|nvidia-[a-z0-9-]+|cuda-[a-z0-9-]+)==' <<<"$locked" | sed 's/==$//')
+          uv sync --locked "${skip[@]}"
+          uv pip install --torch-backend cpu "$(grep -oE '^torch==[^ ;]+' <<<"$locked")"
+
+      - name: Types
+        run: uv run mypy
+
+      # The tests use a tiny randomly initialised TabFM, so no checkpoint is downloaded.
+      - name: Tests
+        run: uv run pytest

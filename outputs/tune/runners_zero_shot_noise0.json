@@ -1,0 +1,49 @@
+{
+  "data": {
+    "task": "runners",
+    "n_train": 1500,
+    "n_val": 500,
+    "n_test": 0,
+    "data_seed": 7,
+    "noise_columns": 0,
+    "val_ceiling": {
+      "log_loss": 0.43350617621840004,
+      "roc_auc": 0.8741367263036448,
+      "accuracy": 0.764
+    }
+  },
+  "config": {
+    "n_trainable_blocks": 4,
+    "train_encoders": false,
+    "learning_rate": 0.0003,
+    "weight_decay": 0.01,
+    "max_steps": 0,
+    "warmup_steps": 5,
+    "context_size": 512,
+    "query_size": 256,
+    "grad_clip": 1.0,
+    "eval_every": 25,
+    "patience": 0,
+    "n_estimators_val": 2,
+    "seed": 0
+  },
+  "best_step": 0,
+  "stopped_early": false,
+  "history": [
+    {
+      "step": 0,
+      "train_loss": NaN,
+      "val_log_loss": 0.46507273579232544,
+      "val_roc_auc": 0.8553843903865841,
+      "val_accuracy": 0.764
+    }
+  ],
+  "total_s": 45.86979762499686,
+  "environment": {
+    "device": "mps",
+    "torch": "2.14.0",
+    "tabfm": "1.0.1",
+    "python": "3.14.0",
+    "machine": "arm64"
+  }
+}

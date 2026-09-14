@@ -1,0 +1,29 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Secrets
+.env
+.env.*
+
+# Tool caches
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.DS_Store
+
+# Fine-tuned weights derive from TabFM's non-commercial checkpoint: never commit them.
+*.safetensors
+*.pt
+*.ckpt
+outputs/pilot*/
+
+# Article, social and slide drafts (not published with the repo)
+drafts/

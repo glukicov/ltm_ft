@@ -1,0 +1,35 @@
+{
+  "data": {
+    "task": "checkerboard",
+    "n_train": 1500,
+    "n_val": 500,
+    "n_test": 0,
+    "data_seed": 7,
+    "noise_columns": 0,
+    "val_ceiling": {
+      "log_loss": 0.13258735157374202,
+      "roc_auc": 0.9719959674193085,
+      "accuracy": 0.972
+    }
+  },
+  "n_estimators": 2,
+  "val": {
+    "bfloat16": {
+      "log_loss": 0.607712849021264,
+      "roc_auc": 0.7748875838120689,
+      "accuracy": 0.702
+    },
+    "float32": {
+      "log_loss": 0.6494740194558146,
+      "roc_auc": 0.6657758717255284,
+      "accuracy": 0.598
+    }
+  },
+  "environment": {
+    "device": "mps",
+    "torch": "2.14.0",
+    "tabfm": "1.0.1",
+    "python": "3.14.0",
+    "machine": "arm64"
+  }
+}
