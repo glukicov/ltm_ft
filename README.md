@@ -46,7 +46,7 @@ TabPFN fine-tuning examples ([classifier](https://github.com/PriorLabs/TabPFN/bl
 - 🪤 **Precision and hardware are part of the model:** the same checkpoint scores 59.8% (float32,
   both machines), 65.0% (bfloat16 on CUDA) and 70.2% (bfloat16 on MPS) on the same validation rows.
 
-> Reading not your game? Slides instead: [HTML + PDF](docs/slides) 🖥️
+> Reading not your game? Slides instead: [HTML + PDF](docs/slides) 🖥️ (produced with [SlideOps](https://github.com/glukicov/slideops))
 
 ## Results
 
