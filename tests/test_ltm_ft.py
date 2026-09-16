@@ -52,7 +52,7 @@ def test_prepared_model_is_the_stock_model_and_masters_round_trip(split: Split) 
     assert all(m.dtype == torch.float32 for m in master.masters)
     X, y = features(split.train), labels(split.train)
     episode = make_episode(model, X.iloc[:90], y[:90], X.iloc[90:], y[90:], seed=0, device="cpu")
-    episode_loss(model, episode).backward()  # type: ignore[no-untyped-call]
+    episode_loss(model, episode).backward()
     master.gradients_to_masters()
     assert all(p.grad is None for p in params) and all(m.grad is not None for m in master.masters)
     torch.optim.SGD(master.masters, lr=0.1).step()
@@ -99,7 +99,7 @@ def test_one_step_changes_only_trainable_weights(split: Split) -> None:
     X, y = features(split.train), labels(split.train)
     episode = make_episode(model, X.iloc[:90], y[:90], X.iloc[90:], y[90:], seed=0, device="cpu")
     loss = episode_loss(model, episode)
-    loss.backward()  # type: ignore[no-untyped-call]
+    loss.backward()
     assert all(p.grad is not None for p in params)
     torch.optim.SGD(params, lr=1.0).step()
 
@@ -137,7 +137,7 @@ def test_encoder_variant_trains_encoders_and_still_predicts(split: Split) -> Non
     params = prepare_for_finetuning(model, n_blocks=1, encoders=True)
     X, y = features(split.train), labels(split.train)
     episode = make_episode(model, X.iloc[:90], y[:90], X.iloc[90:], y[90:], seed=0, device="cpu")
-    episode_loss(model, episode).backward()  # type: ignore[no-untyped-call]
+    episode_loss(model, episode).backward()
     encoder = cast(nn.Module, cast(Any, model).cell_embedder)
     assert all(p.grad is not None for p in encoder.parameters() if p.requires_grad)
     assert len(params) > len(prepare_for_finetuning(tiny_tabfm(), n_blocks=1))

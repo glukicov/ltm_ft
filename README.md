@@ -7,7 +7,7 @@
 [![Python 3.14](https://img.shields.io/badge/python-3.14-blue)](.python-version)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-[![mypy --strict](https://img.shields.io/badge/mypy-strict-2a6db2)](https://mypy-lang.org)
+[![ty](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ty/main/assets/badge/v0.json)](https://github.com/astral-sh/ty)
 <br>
 [![TabFM](https://img.shields.io/badge/Google-TabFM-4285F4)](https://github.com/google-research/tabfm)
 [![PyTorch](https://img.shields.io/badge/PyTorch-MPS%20%7C%20CUDA-EE4C2C)](https://pytorch.org)
@@ -257,7 +257,7 @@ or baked into images. All data is synthetic.
 ```bash
 uv sync
 uv run ruff check . && uv run ruff format --check .
-uv run mypy                                       # strict
+uv run ty check                                   # warnings are errors
 uv run pytest                                     # ~10 s, no checkpoint download
 shellcheck -x k8s/gke/*.sh k8s/gke/kctl docker/requirements.sh
 ```

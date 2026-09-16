@@ -234,7 +234,7 @@ def finetune(
             model, X_train.iloc[ctx], y_train[ctx], X_train.iloc[qry], y_train[qry], int(rng.integers(2**31)), device
         )
         loss = episode_loss(model, episode)
-        loss.backward()  # type: ignore[no-untyped-call]
+        loss.backward()
         master.gradients_to_masters()
         torch.nn.utils.clip_grad_norm_(master.masters, config.grad_clip)
         optimizer.step()

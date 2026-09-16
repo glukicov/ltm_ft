@@ -50,8 +50,8 @@ EveryOpt = Annotated[int, typer.Option(help="validate every N steps")]
 DeviceOpt = Annotated[str, typer.Option(help="torch device (default: mps, then cuda, then cpu)")]
 
 
-def _config(**kwargs: object) -> FinetuneConfig:
-    return FinetuneConfig(**kwargs)  # type: ignore[arg-type]
+def _config(**kwargs: Any) -> FinetuneConfig:
+    return FinetuneConfig(**kwargs)
 
 
 def _summary(title: str, rows: dict[str, Metrics], deltas: dict[str, dict[str, float]], n_test: int) -> str:

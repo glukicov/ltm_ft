@@ -6,9 +6,9 @@ modules, a result that does not reproduce on your machine, or a fix.
 ## Setup and checks
 
 ```bash
-uv sync                                        # project + dev tools (ruff, mypy, pytest), pinned in uv.lock
+uv sync                                        # project + dev tools (ruff, ty, pytest), pinned in uv.lock
 uv run ruff check . && uv run ruff format --check .
-uv run mypy                                    # strict
+uv run ty check                                # warnings are errors
 uv run pytest                                  # tiny random TabFM on CPU: no checkpoint download
 shellcheck -x k8s/gke/*.sh k8s/gke/kctl docker/requirements.sh
 docker/requirements.sh                         # after changing dependencies: regenerate the image's requirements

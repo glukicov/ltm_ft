@@ -27,25 +27,25 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-    "mypy>=2.3.1",
     "pandas-stubs>=3.0.5.260730",
     "pytest>=9.1.1",
     "ruff>=0.16.7",
+    "ty>=0.0.81",
 ]
 
 [tool.ruff]
 line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "ANN"]
+# ANN: every function is annotated (ty, unlike mypy --strict, does not require it). Any is used deliberately.
+ignore = ["ANN401"]
 
-[tool.mypy]
-strict = true
-files = ["src", "tests"]
+[tool.ty.src]
+include = ["src", "tests"]
 
-[[tool.mypy.overrides]]
-module = ["tabfm", "tabfm.*", "sklearn", "sklearn.*", "safetensors", "safetensors.*"]
-ignore_missing_imports = true
+[tool.ty.terminal]
+error-on-warning = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

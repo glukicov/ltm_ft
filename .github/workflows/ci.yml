@@ -25,7 +25,7 @@ jobs:
         with:
           enable-cache: true
 
-      # No python-version here: uv reads .python-version. Only the dev group (ruff, mypy, pytest) is installed.
+      # No python-version here: uv reads .python-version. Only the dev group (ruff, ty, pytest) is installed.
       - name: Install the development toolchain
         run: uv sync --locked --only-dev
 
@@ -42,7 +42,7 @@ jobs:
           shellcheck -x k8s/gke/kctl
 
   test:
-    name: Types (mypy --strict) and tests
+    name: Types (ty) and tests
     runs-on: ubuntu-latest
     env:
       # `uv run` would otherwise re-sync the environment and swap the CPU torch below for the locked CUDA build.
@@ -55,7 +55,7 @@ jobs:
           enable-cache: true
 
       # CPU-only PyTorch. uv.lock pins torch from PyPI, whose Linux wheels bring gigabytes of CUDA libraries that
-      # neither mypy nor the tests use. Install everything else exactly as locked (--locked still fails on a stale
+      # neither ty nor the tests use. Install everything else exactly as locked (--locked still fails on a stale
       # uv.lock), skip torch and its CUDA wheels, then install the CPU build of the locked torch version.
       - name: Install the project with CPU-only PyTorch
         run: |
@@ -68,7 +68,7 @@ jobs:
           uv pip install --torch-backend cpu "$(grep -oE '^torch==[^ ;]+' <<<"$locked")"
 
       - name: Types
-        run: uv run mypy
+        run: uv run ty check
 
       # The tests use a tiny randomly initialised TabFM, so no checkpoint is downloaded.
       - name: Tests
